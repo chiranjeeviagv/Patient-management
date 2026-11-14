@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
+import razorpay
 from datetime import datetime
 from utils import (
     ALL_TIME_SLOTS, load_clinical_data, apply_custom_ui,
@@ -11,11 +12,27 @@ st.set_page_config(page_title="Patient Portal | Hospital System", page_icon="�
 apply_custom_ui()
 init_db()
 
+# Initialize Razorpay Client using Streamlit Secrets
+client = razorpay.Client(auth=(st.secrets["RAZORPAY_KEY_ID"], st.secrets["RAZORPAY_KEY_SECRET"]))
+
 doctors_df, rules_df = load_clinical_data()
 specialty_cards = doctors_df.to_dict("records")
 specialty_doctors = doctors_df["doctor"].tolist()
+fee_map = dict(zip(doctors_df["doctor"], doctors_df["fee"]))
 symptom_variants = rules_df["symptom"].unique().tolist()
 symptom_to_doc = dict(zip(rules_df["symptom"], rules_df["doctor"]))
+
+# --- HANDLE PAYMENT REDIRECT FROM RAZORPAY ---
+query_params = st.query_params
+if query_params.get("razorpay_payment_link_status") == "paid":
+    appt_id = query_params.get("appt_id")
+    if appt_id:
+        conn = sqlite3.connect("hospital_v2.db")
+        conn.execute("UPDATE appointments SET status = 'Confirmed (Paid)' WHERE id = ?", (appt_id,))
+        conn.commit()
+        conn.close()
+        st.success(f"🎉 Payment successful! Appointment #{appt_id} is now Confirmed.")
+        st.query_params.clear()
 
 render_hero("🏥 Patient Health Management System", "Select a medical specialty below, complete a symptom check, or download your prescriptions.")
 
@@ -32,7 +49,7 @@ for idx, spec in enumerate(specialty_cards):
         with all_cols[idx]:
             with st.container(border=True):
                 st.markdown(f"#### {spec['icon']} {spec['dept']}")
-                st.caption(f"**{spec['doctor']}**")
+                st.caption(f"**{spec['doctor']}** • Fee: ₹{spec.get('fee', 500)}")
                 st.write(f"<small>{spec['desc']}</small>", unsafe_allow_html=True)
                 if st.button(f"Select {spec['dept']}", key=f"btn_spec_{idx}", use_container_width=True):
                     st.session_state["selected_specialty_doc"] = spec["doctor"]
@@ -71,9 +88,12 @@ with col_left:
             recommended_doc = default_doc
 
     st.markdown("---")
-    st.subheader("🗓️ Step 2: Confirm Appointment Details")
+    st.subheader("🗓️ Step 2: Confirm Appointment & Pay Consultation Fee")
     default_idx = specialty_doctors.index(recommended_doc) if recommended_doc in specialty_doctors else 0
     doctor_choice = st.selectbox("Assigned Department Specialist", specialty_doctors, index=default_idx)
+
+    consult_fee = float(fee_map.get(doctor_choice, 500.0))
+    st.info(f"💳 **Consultation Fee for {doctor_choice}:** ₹{consult_fee:,.2f}")
 
     col_date, col_time = st.columns(2)
     with col_date:
@@ -100,7 +120,7 @@ with col_left:
             p_gender = st.selectbox("Gender", ["Male", "Female", "Other"])
         p_contact = st.text_input("Registered Contact Number", placeholder="e.g. 9876543210")
 
-        if st.form_submit_button("Confirm Appointment Slot", type="primary"):
+        if st.form_submit_button(f"Proceed to Pay ₹{consult_fee:,.0f} & Book", type="primary"):
             if not patient_name.strip() or not p_contact.strip():
                 st.error("Please enter both patient name and contact number.")
             elif not selected_symptoms:
@@ -110,15 +130,37 @@ with col_left:
             else:
                 triage = f"[Severity: {severity} | Duration: {duration} | Age: {p_age}] Symptoms: {', '.join(selected_symptoms)}. Notes: {additional_details or 'None'}"
                 conn = sqlite3.connect("hospital_v2.db")
-                conn.execute(
+                cur = conn.cursor()
+                cur.execute(
                     "INSERT INTO appointments (patient_name, patient_age, patient_gender, patient_contact, patient_problem, doctor, appt_date, appt_time, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (patient_name.strip(), p_age, p_gender, p_contact.strip(), triage, doctor_choice, str(appointment_date), appointment_time, "Pending")
+                    (patient_name.strip(), p_age, p_gender, p_contact.strip(), triage, doctor_choice, str(appointment_date), appointment_time, "Awaiting Payment")
                 )
+                new_appt_id = cur.lastrowid
                 conn.commit()
                 conn.close()
-                st.session_state["selected_specialty_doc"] = None
-                st.success(f"🎉 Appointment booked with **{doctor_choice}** on {appointment_date} at {appointment_time}!")
-                st.rerun()
+
+                try:
+                    payment_data = {
+                        "amount": int(consult_fee * 100),
+                        "currency": "INR",
+                        "description": f"Consultation with {doctor_choice}",
+                        "customer": {
+                            "name": patient_name.strip(),
+                            "contact": p_contact.strip()
+                        },
+                        "notify": {"sms": False, "email": False},
+                        "callback_url": f"https://streamlit.app{new_appt_id}",
+                        "callback_method": "get"
+                    }
+                    payment_link = client.payment_link.create(payment_data)
+                    st.session_state["pending_payment_url"] = payment_link["short_url"]
+                    st.session_state["pending_appt_id"] = new_appt_id
+                except Exception as e:
+                    st.error(f"Payment gateway error: {e}")
+
+    if "pending_payment_url" in st.session_state:
+        st.warning(f"Slot reserved (ID #{st.session_state['pending_appt_id']}). Complete payment below to confirm:")
+        st.link_button("💳 Pay Now via UPI / Card", st.session_state["pending_payment_url"], type="primary", use_container_width=True)
 
 with col_right:
     tab_req, tab_rx = st.tabs(["📋 Active Requests", "📄 Download Prescriptions & Notes"])
@@ -146,8 +188,21 @@ with col_right:
                         st.markdown(f"**Diagnosis:** {rec['diagnosed_disease']}")
                         st.info(f"💊 **Rx:** {rec['prescription']}")
                         st.caption(f"📝 **Notes:** {rec['notes'] or 'None'}")
-                        pdf_bytes = build_prescription_pdf(rec["patient_name"], rec["doctor"], rec["diagnosed_disease"], rec["symptoms"], rec["prescription"], rec["notes"])
-                        st.download_button("📥 Download PDF", data=pdf_bytes, file_name=f"Rx_{rec['id']}.pdf", mime="application/pdf", key=f"dl_{rec['id']}")
+                        pdf_bytes = build_prescription_pdf(
+                            rec["patient_name"],
+                            rec["doctor"],
+                            rec["diagnosed_disease"],
+                            rec["symptoms"],
+                            rec["prescription"],
+                            rec["notes"]
+                        )
+                        st.download_button(
+                            "📥 Download PDF",
+                            data=pdf_bytes,
+                            file_name=f"Rx_{rec['id']}.pdf",
+                            mime="application/pdf",
+                            key=f"dl_{rec['id']}"
+                        )
             else:
                 conn.close()
                 st.error("❌ Verification failed. Check your name and phone number.")
