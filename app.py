@@ -3,6 +3,8 @@ import pandas as pd
 import sqlite3
 import razorpay
 from datetime import datetime
+from security_utils import init_audit_table, encrypt_pii, decrypt_pii, mask_aadhar, log_audit_event, verify_audit_chain
+init_audit_table("your_database.db")
 from utils import (
     ALL_TIME_SLOTS, load_clinical_data, apply_custom_ui,
     render_hero, init_db, build_prescription_pdf
