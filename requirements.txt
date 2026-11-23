@@ -1,9 +1,9 @@
 streamlit
 pandas
 plotly
-reportlab
-razorpay
 cryptography
 scikit-learn
 fpdf2
 qrcode[pil]
+razorpay
+psycopg2-binary
