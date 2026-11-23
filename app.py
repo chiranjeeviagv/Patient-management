@@ -349,10 +349,20 @@ with nav_portal:
     with col_right:
         tab_req, tab_rx = st.tabs(["📋 Active Requests", "📄 Download Prescriptions & Notes"])
         with tab_req:
-            conn = sqlite3.connect(DB_PATH)
-            df = pd.read_sql_query("SELECT id AS ID, patient_name AS [Patient Name], doctor AS Doctor, appt_date AS [Date], appt_time AS [Slot], aadhaar_masked AS [e-KYC ID], status AS Status FROM appointments ORDER BY id DESC", conn)
-            conn.close()
-            st.dataframe(df, use_container_width=True, hide_index=True)
+         conn = sqlite3.connect(DB_PATH)
+         cols = {r[1] for r in conn.execute("PRAGMA table_info(appointments)").fetchall()}
+         if "aadhaar_masked" not in cols:
+             conn.execute("ALTER TABLE appointments ADD COLUMN aadhaar_masked TEXT DEFAULT 'Unverified'")
+             conn.commit()
+         df = pd.read_sql_query(
+             "SELECT id AS ID, patient_name AS [Patient Name], doctor AS Doctor, "
+             "appt_date AS [Date], appt_time AS [Slot], "
+             "COALESCE(aadhaar_masked, 'Unverified') AS [e-KYC ID], status AS Status "
+             "FROM appointments ORDER BY id DESC",
+             conn
+         )
+         conn.close()
+         st.dataframe(df, use_container_width=True, hide_index=True)
 
         with tab_rx:
             st.caption("Enter your full name and registered phone number to download your prescription PDF.")
