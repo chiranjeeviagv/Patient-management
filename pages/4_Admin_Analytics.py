@@ -3,7 +3,11 @@ import pandas as pd
 import plotly.express as px
 import sqlite3
 from utils import load_clinical_data, apply_custom_ui, render_hero, require_login
-
+is_valid, status_msg = verify_audit_chain("your_database.db")
+if is_valid:
+    st.success(f"🔒 {status_msg}")
+else:
+    st.error(f"🚨 {status_msg}")
 st.set_page_config(page_title="Admin Analytics", page_icon="📊", layout="wide")
 apply_custom_ui()
 
