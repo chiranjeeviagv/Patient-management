@@ -8,9 +8,16 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
+# Updated Time Slots: Morning (09:00 AM - 02:00 PM) & Afternoon/Evening (03:00 PM - 09:00 PM)
 ALL_TIME_SLOTS = (
+    # Morning Session (09:00 AM to 02:00 PM)
     "09:00 AM", "09:30 AM", "10:00 AM", "10:30 AM",
-    "11:00 AM", "02:00 PM", "02:30 PM", "03:00 PM", "03:30 PM"
+    "11:00 AM", "11:30 AM", "12:00 PM", "12:30 PM",
+    "01:00 PM", "01:30 PM",
+    # Afternoon & Evening Session (03:00 PM to 09:00 PM)
+    "03:00 PM", "03:30 PM", "04:00 PM", "04:30 PM",
+    "05:00 PM", "05:30 PM", "06:00 PM", "06:30 PM",
+    "07:00 PM", "07:30 PM", "08:00 PM", "08:30 PM"
 )
 
 def load_clinical_data():
@@ -48,12 +55,8 @@ def apply_custom_ui():
         [data-testid="stSidebar"] [data-testid="stAlert"] * {
             color: #162e44 !important;
         }
-        }
         [data-testid="stSidebar"] input {
             color: #1e3d59 !important;
-        }
-        [data-testid="stSidebar"] [data-testid="stAlert"] * {
-            color: #162e44 !important;
         }
         .hero-banner {
             background: linear-gradient(135deg, #1e3d59 0%, #17b978 100%);
@@ -165,7 +168,32 @@ def init_db():
         ('Myo-Inositol + Folic Acid', 'PCOS Metabolic Support', 90, 25, 340.0),
         ('Mefenamic Acid 250mg', 'Antispasmodic Analgesic', 110, 30, 75.0),
         ('Folic Acid 5mg', 'Prenatal Supplement', 200, 50, 60.0),
-        ('Calcium + Vitamin D3', 'Bone & Hormonal Support', 150, 40, 180.0)
+        ('Calcium + Vitamin D3', 'Bone & Hormonal Support', 150, 40, 180.0),
+        ('Paracetamol Pediatric Drops', 'Pediatric Antipyretic', 80, 15, 65.0),
+        ('Saline Nasal Drops', 'Pediatric Respiratory', 90, 15, 45.0),
+        ('Ketorolac 10mg', 'Dental Analgesic', 100, 20, 75.0),
+        ('Chlorhexidine Mouthwash', 'Dental Antiseptic', 75, 15, 110.0),
+        ('Telmisartan 40mg', 'Antihypertensive', 100, 20, 145.0),
+        ('Torsemide 10mg', 'Cardiac Diuretic', 85, 15, 95.0),
+        ('Cetirizine 10mg', 'Antihistamine / Allergy', 150, 25, 35.0),
+        ('Clotrimazole Cream', 'Topical Antifungal', 90, 15, 85.0),
+        ('Aceclofenac Combo', 'Orthopedic Analgesic', 110, 20, 110.0),
+        ('Etoricoxib 90mg', 'COX-2 Inhibitor / NSAID', 95, 15, 160.0),
+        ('Mebeverine 135mg', 'Antispasmodic / GI', 80, 15, 180.0),
+        ('Esomeprazole 40mg', 'Antacid / PPI', 120, 20, 130.0),
+        ('Tiotropium Rotacaps', 'COPD Bronchodilator', 65, 10, 320.0),
+        ('Fluticasone Spray', 'Respiratory Corticosteroid', 70, 12, 290.0),
+        ('Metformin 500mg', 'Antidiabetic / Glycemic', 160, 30, 65.0),
+        ('Levothyroxine 50mcg', 'Thyroid Hormone', 130, 25, 115.0),
+        ('Renal Diet Protocol', 'Nephrology Nutrition Pack', 50, 10, 250.0),
+        ('Potassium Citrate Syr.', 'Urinary Alkalizer', 75, 15, 140.0),
+        ('Tamsulosin 0.4mg', 'Alpha-Blocker / Urology', 85, 15, 210.0),
+        ('Nitrofurantoin 100mg', 'Urinary Antibiotic', 95, 15, 125.0),
+        ('Ondansetron 8mg', 'Antiemetic / Oncology', 110, 20, 90.0),
+        ('Hydroxychloroquine 200mg', 'DMARD / Immunomodulator', 80, 15, 175.0),
+        ('Indomethacin 75mg', 'Rheumatology NSAID', 90, 15, 120.0),
+        ('IFT Rehab Protocol', 'Physiotherapy Session', 100, 10, 400.0),
+        ('Ultrasound & Exercise', 'Physiotherapy Session', 100, 10, 350.0)
     ]
     cursor.executemany(
         "INSERT OR IGNORE INTO inventory (medicine_name, category, stock_qty, min_required, unit_price) VALUES (?, ?, ?, ?, ?)",
