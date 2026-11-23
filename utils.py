@@ -7,7 +7,67 @@ from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
+import hashlib
+import random
+import requests
 
+# --- OFFICIAL UIDAI VERHOEFF CHECKSUM VALIDATION ---
+_VERHOEFF_D = (
+    (0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
+    (1, 2, 3, 4, 0, 6, 7, 8, 9, 5),
+    (2, 3, 4, 0, 1, 7, 8, 9, 5, 6),
+    (3, 4, 0, 1, 2, 8, 9, 5, 6, 7),
+    (4, 0, 1, 2, 3, 9, 5, 6, 7, 8),
+    (5, 9, 8, 7, 6, 0, 4, 3, 2, 1),
+    (6, 5, 9, 8, 7, 1, 0, 4, 3, 2),
+    (7, 6, 5, 9, 8, 2, 1, 0, 4, 3),
+    (8, 7, 6, 5, 9, 3, 2, 1, 0, 4),
+    (9, 8, 7, 6, 5, 4, 3, 2, 1, 0),
+)
+_VERHOEFF_P = (
+    (0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
+    (1, 5, 7, 6, 2, 8, 3, 0, 9, 4),
+    (5, 8, 0, 3, 7, 9, 6, 1, 4, 2),
+    (8, 9, 1, 6, 0, 4, 3, 5, 2, 7),
+    (9, 4, 5, 3, 1, 2, 6, 8, 7, 0),
+    (4, 2, 8, 6, 5, 7, 3, 9, 0, 1),
+    (2, 7, 9, 3, 8, 0, 6, 4, 1, 5),
+    (7, 0, 4, 6, 9, 1, 3, 2, 5, 8),
+)
+
+def is_valid_aadhaar_format(aadhaar_str: str) -> bool:
+    """Validates 12 digits, non-zero/one start, and official UIDAI Verhoeff checksum."""
+    digits = "".join(ch for ch in str(aadhaar_str) if ch.isdigit())
+    if len(digits) != 12 or digits[0] in ("0", "1"):
+        return False
+    c = 0
+    for idx, ch in enumerate(reversed(digits)):
+        c = _VERHOEFF_D[c][_VERHOEFF_P[idx % 8][int(ch)]]
+    return c == 0
+
+def mask_and_hash_aadhaar(aadhaar_str: str, salt: str = "HOSPITAL_EHEALTH_2026") -> tuple[str, str]:
+    """Returns (masked_display, sha256_reference_hash) so raw Aadhaar is never stored."""
+    digits = "".join(ch for ch in str(aadhaar_str) if ch.isdigit())
+    masked = f"XXXX-XXXX-{digits[-4:]}"
+    ref_hash = hashlib.sha256(f"{salt}:{digits}".encode("utf-8")).hexdigest()
+    return masked, ref_hash
+
+def send_aadhaar_otp(aadhaar_digits: str) -> dict:
+    """
+    Triggers OTP via licensed KYC provider (if configured in st.secrets)
+    or runs in Sandbox Demo mode for immediate testing.
+    """
+    if "KYC_API_KEY" in st.secrets and "KYC_BASE_URL" in st.secrets:
+        resp = requests.post(
+            f"{st.secrets['KYC_BASE_URL']}/aadhaar/otp",
+            headers={"x-api-key": st.secrets["KYC_API_KEY"], "Content-Type": "application/json"},
+            json={"aadhaar_number": aadhaar_digits},
+            timeout=15,
+        )
+        return resp.json()
+    # Sandbox Demo Fallback
+    demo_otp = str(random.randint(100000, 999999))
+    return {"status": "sandbox", "ref_id": f"REF-{random.randint(10000,99999)}", "demo_otp": demo_otp}
 # Morning (09:00 AM - 02:00 PM) & Afternoon/Evening (03:00 PM - 09:00 PM)
 ALL_TIME_SLOTS = (
     "09:00 AM", "09:30 AM", "10:00 AM", "10:30 AM",
