@@ -5,3 +5,5 @@ reportlab
 razorpay
 cryptography
 scikit-learn
+fpdf2
+qrcode[pil]
