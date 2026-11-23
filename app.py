@@ -9,6 +9,8 @@ from utils import (
     ALL_TIME_SLOTS, load_clinical_data, apply_custom_ui,
     render_hero, init_db, build_prescription_pdf
 )
+from demo_seeder import seed_portfolio_demo_data
+seed_portfolio_demo_data("hospital_v2.db")
 from utils import (
     ALL_TIME_SLOTS, load_clinical_data, apply_custom_ui,
     render_hero, init_db, build_prescription_pdf,
