@@ -14,6 +14,29 @@ from utils import (
     render_hero, init_db, build_prescription_pdf,
     is_valid_aadhaar_format, mask_and_hash_aadhaar, send_aadhaar_otp
 )
+from ai_triage_engine import ClinicalAIEngine
+from security_utils import log_audit_event
+
+@st.cache_resource
+def load_ai_engine():
+    return ClinicalAIEngine()
+
+ai_engine = load_ai_engine()
+
+with st.expander("🤖 AI Symptom-to-Specialty Triage & No-Show Risk Assistant", expanded=True):
+    symptoms = st.text_input("Describe patient symptoms (e.g., 'chest pain and shortness of breath' or 'knee joint swelling'):")
+    if symptoms:
+        recommendations = ai_engine.recommend_specialty(symptoms)
+        top_spec, confidence, urgency = recommendations[0]
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Recommended Department", top_spec)
+        col2.metric("NLP Match Confidence", f"{confidence}%")
+        col3.metric("Triage Priority", urgency)
+        
+        if len(recommendations) > 1:
+            alt_list = ", ".join([f"{s} ({c}%)" for s, c, _ in recommendations[1:]])
+            st.caption(f"Secondary differential departments: {alt_list}")
+        log_audit_event("AI_Triage", "Patient_Portal", "AI_SYMPTOM_TRIAGE", f"Dept:{top_spec}")
 HOSPITAL_TITLE = "Sunrise Multispecialty Hospital & E-Health Portal"
 HOSPITAL_SUBTITLE = "20+ Clinical Specialties • Digital Triage • Instant Slot Booking & E-Prescriptions"
 # Run once safely on startup in app.py
