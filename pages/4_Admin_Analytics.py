@@ -10,7 +10,34 @@ else:
     st.error(f"🚨 {status_msg}")
 st.set_page_config(page_title="Admin Analytics", page_icon="📊", layout="wide")
 apply_custom_ui()
+import sqlite3
+import pandas as pd
+import streamlit as st
+from security_utils import verify_audit_chain, log_audit_event
 
+st.subheader("🛡️ Healthcare Cybersecurity & Tamper-Evident Audit Trail")
+
+# 1. Verify SHA-256 Hash Chain Integrity
+is_valid, status_msg = verify_audit_chain("hospital.db")  # Replace with your exact SQLite filename
+if is_valid:
+    st.success(f"Cryptographic Chain Verified: {status_msg}")
+else:
+    st.error(f"Security Alert: {status_msg}")
+
+# 2. Display Recent Audit Logs
+conn = sqlite3.connect("hospital.db")
+audit_df = pd.read_sql_query(
+    "SELECT id, timestamp, actor_role, actor_id, action, target_record, substr(record_hash, 1, 16) || '...' AS sha256_signature FROM security_audit_logs ORDER BY id DESC LIMIT 15",
+    conn
+)
+conn.close()
+
+if not audit_df.empty:
+    st.dataframe(audit_df, use_container_width=True)
+else:
+    if st.button("Generate Genesis Security Log"):
+        log_audit_event("System_Admin", "G V Chiranjeevi Adari", "SYSTEM_INIT", "EHR_Security_Engine")
+        st.rerun()
 if require_login("Admin Analytics", "admin123"):
     render_hero("📊 Hospital Operational Control Panel", "Real-time booking metrics, revenue, and disease incidence analytics across 20 specialties.")
     
