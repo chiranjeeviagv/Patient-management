@@ -9,12 +9,11 @@ def seed_portfolio_demo_data(db_path="hospital_v2.db"):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-    # Check if tables exist and whether appointments already have data
     try:
         count = cursor.execute("SELECT COUNT(*) FROM appointments").fetchone()[0]
-    except sqlite3.OperationalError:
+    except sqlite3.Error:
         conn.close()
-        return  # Let app.py create tables first if not yet initialized
+        return
 
     if count > 0:
         conn.close()
@@ -36,11 +35,14 @@ def seed_portfolio_demo_data(db_path="hospital_v2.db"):
         ("Divya Krishnan", 36, "Acute sinus congestion and earache", "Pending", today, "06:00 PM"),
     ]
 
-    # Pick up to 6 distinct doctors from your CSV dataset
     doc_list = doctors_df["doctor"].tolist()
     if not doc_list:
         conn.close()
         return
+
+    # Inspect actual billing table columns so all NOT NULL constraints are satisfied
+    billing_cols_info = cursor.execute("PRAGMA table_info(billing)").fetchall()
+    billing_cols = [col[1] for col in billing_cols_info if col[1] != "id"]
 
     for idx, (p_name, p_age, problem, status, appt_date, slot) in enumerate(sample_patients):
         doc = doc_list[idx % len(doc_list)]
@@ -50,7 +52,6 @@ def seed_portfolio_demo_data(db_path="hospital_v2.db"):
             (p_name, p_age, doc, problem, appt_date, slot, status)
         )
 
-        # For Completed cases, also seed consultations & billing ledgers
         if status == "Completed":
             doc_rule = rules_df[rules_df["doctor"] == doc]
             if not doc_rule.empty:
@@ -61,8 +62,9 @@ def seed_portfolio_demo_data(db_path="hospital_v2.db"):
 
             med_cost = 180.0
             consult_fee = 500.0
-            tax = round((consult_fee + med_cost) * 0.18, 2)
-            grand_total = round(consult_fee + med_cost + tax, 2)
+            sub_total = consult_fee + med_cost
+            tax = round(sub_total * 0.18, 2)
+            grand_total = round(sub_total + tax, 2)
 
             cursor.execute(
                 "INSERT INTO consultations (patient_name, patient_age, doctor, symptoms, diagnosed_disease, prescription, medicine_dispensed, medicine_cost, notes, consultation_date) "
@@ -70,19 +72,32 @@ def seed_portfolio_demo_data(db_path="hospital_v2.db"):
                 (p_name, p_age, doc, symp, diag, rx, med, med_cost, "Follow-up in 7 days; vitals stable.", f"{appt_date} {slot}")
             )
 
-            # Seed billing record (wrapped in try/except in case column names vary slightly)
-            try:
-                cursor.execute(
-                    "INSERT INTO billing (patient_name, doctor_assigned, consultation_fee, medicine_fee, tax_amount, grand_total, payment_status) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (p_name, doc, consult_fee, med_cost, tax, grand_total, "Paid")
-                )
-            except sqlite3.OperationalError:
-                pass
+            if billing_cols:
+                default_values = {
+                    "invoice_no": f"INV-2026-{1001 + idx}",
+                    "patient_name": p_name,
+                    "doctor_assigned": doc,
+                    "doctor": doc,
+                    "consultation_fee": consult_fee,
+                    "medicine_fee": med_cost,
+                    "sub_total": sub_total,
+                    "tax_amount": tax,
+                    "grand_total": grand_total,
+                    "payment_status": "Paid",
+                    "payment_method": "Razorpay UPI",
+                    "bill_date": appt_date,
+                    "created_at": f"{appt_date} {slot}",
+                }
+                row_vals = [default_values.get(c, "N/A") for c in billing_cols]
+                placeholders = ", ".join(["?"] * len(billing_cols))
+                col_names = ", ".join(billing_cols)
+                try:
+                    cursor.execute(f"INSERT INTO billing ({col_names}) VALUES ({placeholders})", row_vals)
+                except sqlite3.Error:
+                    pass
 
     conn.commit()
     conn.close()
 
-    # Log cryptographic audit entries for the seeded clinical actions
     log_audit_event("System_Seeder", "Sunrise_HMS_Init", "SEED_DEMO_RECORDS", "6 Clinical Encounters", db_path=db_path)
     log_audit_event("Doctor", doc_list[0], "FINALIZE_CONSULTATION", "Ramesh Naidu", db_path=db_path)
