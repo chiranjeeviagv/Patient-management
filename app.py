@@ -4,7 +4,7 @@ import sqlite3
 import razorpay
 from datetime import datetime
 
-HOSPITAL_TITLE = "Sunrise Multispecialty Hospital & E-Health Portal"
+HOSPITAL_TITLE = "Govardhan Multispecialty Hospital & E-Health Portal"
 HOSPITAL_SUBTITLE = "20+ Clinical Specialties • Digital Triage • Instant Slot Booking & E-Prescriptions"
 DB_PATH = "hospital_v2.db"
 
@@ -403,7 +403,7 @@ with nav_about:
         with st.container(border=True):
             st.markdown("### Excellence in Multispecialty Clinical Care & Digital Health")
             st.write(
-                "Founded to bridge specialized medical expertise with seamless digital patient access, "
+                "Founded to bridge specialized medical expertise with seamless digital patient access and initiation of digital governance, "
                 f"**{HOSPITAL_TITLE}** delivers comprehensive outpatient, diagnostic, and preventive healthcare "
                 "across **20 specialized clinical departments**. Our integrated E-Health platform empowers patients "
                 "with intelligent symptom-based specialist routing, transparent consultation fees, real-time slot "
@@ -424,7 +424,7 @@ with nav_about:
             m3, m4 = st.columns(2)
             m3.metric("Daily OPD Slots", "22 Slots / Specialist")
             m4.metric("Emergency Support", "24 × 7 Triage")
-            st.info("📍 **Location:** 123 Health Boulevard, Wellness District, Visakhapatnam – 530047, AP\n\n📞 **Helpline:** +91 99999 88888 | ✉️ **Email:** care@sunrisemedical.in")
+            st.info("📍 **Location:** Simhachalam Hills, Simhachalam North, Visakhapatnam – 530029, AP\n\n📞 **Helpline:** +91 99999 88888 | ✉️ **Email:** care@govardhanmedical.in")
 
 # ==============================================================================
 # TAB 3: ADMINISTRATION
@@ -433,10 +433,10 @@ with nav_admin:
     st.subheader("👔 Hospital Administration & Governance")
     st.caption("Leadership team overseeing clinical standards, hospital operations, nursing quality, and patient welfare.")
     admin_leaders = [
-        ("Dr. M. Raghavendra Rao, MD", "Medical Director & Chief of Clinical Services", "25+ years in Internal Medicine & Hospital Quality Accreditation (NABH). Oversees clinical protocols across all 20 departments."),
-        ("Mrs. K. Padmavathi, MBA (Hosp. Admin)", "Chief Administrative Officer (CAO)", "Leads hospital operations, outpatient scheduling efficiency, billing transparency, and statutory healthcare compliance."),
-        ("Dr. S. Suryaprakasa Rao, MS", "Dean of Medical Academics & Clinical Audit", "Heads continuing medical education (CME), clinical peer audits, and diagnostic quality assurance."),
-        ("Mr. R. Venkatesh, M.Pharm", "Chief Pharmacist & Supply Chain Head", "Manages dispensary inventory, cold-chain storage, and essential medicine availability.")
+        ("Mr. K Aravind, MD", "Medical Director & Chief of Clinical Services", "25+ years in Internal Medicine & Hospital Quality Accreditation (NABH). Oversees clinical protocols across all 20 departments."),
+        ("Mrs. K Geetha Madhavi, MBA (Hosp. Admin)", "Chief Administrative Officer (CAO)", "Leads hospital operations, outpatient scheduling efficiency, billing transparency, and statutory healthcare compliance."),
+        ("Dr. A Pradeep kumar, MS", "Dean of Medical Academics & Clinical Audit", "Heads continuing medical education (CME), clinical peer audits, and diagnostic quality assurance."),
+        ("Mr. K Ramana, M.Pharm", "Chief Pharmacist & Supply Chain Head", "Manages dispensary inventory, cold-chain storage, and essential medicine availability.")
     ]
     a_cols = st.columns(2, gap="medium")
     for idx, (name, role, bio) in enumerate(admin_leaders):
@@ -520,8 +520,8 @@ with nav_contact:
             st.markdown("### 🏥 Sunrise Multispecialty Hospital")
             st.markdown(
                 "**Address:**\n"
-                "123 Health Boulevard, Wellness District,\n"
-                "Visakhapatnam – 530047, Andhra Pradesh, India"
+                "Simhachalam Hills, Simhachalam North,\n"
+                "Visakhapatnam – 530029, Andhra Pradesh, India"
             )
             st.divider()
             st.markdown(
