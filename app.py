@@ -10,7 +10,17 @@ from utils import (
 
 HOSPITAL_TITLE = "Sunrise Multispecialty Hospital & E-Health Portal"
 HOSPITAL_SUBTITLE = "20+ Clinical Specialties • Digital Triage • Instant Slot Booking & E-Prescriptions"
-
+# Run once safely on startup in app.py
+conn = sqlite3.connect("hospital_v2.db")
+existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(appointments)").fetchall()}
+if "aadhaar_masked" not in existing_cols:
+    conn.execute("ALTER TABLE appointments ADD COLUMN aadhaar_masked TEXT DEFAULT 'Unverified'")
+if "aadhaar_hash" not in existing_cols:
+    conn.execute("ALTER TABLE appointments ADD COLUMN aadhaar_hash TEXT DEFAULT ''")
+if "kyc_verified" not in existing_cols:
+    conn.execute("ALTER TABLE appointments ADD COLUMN kyc_verified INTEGER DEFAULT 0")
+conn.commit()
+conn.close()
 st.set_page_config(page_title=HOSPITAL_TITLE, page_icon="🏥", layout="wide")
 apply_custom_ui()
 init_db()
