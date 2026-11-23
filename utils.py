@@ -131,9 +131,31 @@ def apply_custom_ui():
         unsafe_allow_html=True,
     )
 
-def render_hero(title, subtitle):
-    st.markdown(f'<div class="hero-banner"><h1>{title}</h1><p>{subtitle}</p></div>', unsafe_allow_html=True)
-
+def render_hero(title: str, subtitle: str):
+    st.markdown(f"""
+    <div style="
+        background: linear-gradient(135deg, #0f4c81 0%, #008080 100%);
+        padding: 26px 32px;
+        border-radius: 14px;
+        color: white;
+        margin-bottom: 20px;
+        box-shadow: 0 6px 18px rgba(15, 76, 129, 0.18);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    ">
+        <div>
+            <h1 style="margin: 0; font-size: 2rem; color: #ffffff;">{title}</h1>
+            <p style="margin: 6px 0 0 0; font-size: 1.05rem; color: #e0f2fe;">{subtitle}</p>
+        </div>
+        <svg width="96" height="64" viewBox="0 0 120 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="48" y="8" width="24" height="64" rx="4" fill="rgba(255,255,255,0.18)"/>
+            <rect x="28" y="28" width="64" height="24" rx="4" fill="rgba(255,255,255,0.18)"/>
+            <polyline points="8,42 34,42 42,20 54,62 66,14 76,48 84,42 112,42"
+                      stroke="#38bdf8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+    </div>
+    """, unsafe_allow_html=True)
 def require_login(role_name, expected_password):
     st.sidebar.markdown(f"#### 🔐 {role_name} Login")
     pwd = st.sidebar.text_input("Enter Access Password:", type="password", key=f"auth_{role_name}")
