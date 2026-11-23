@@ -438,7 +438,83 @@ with nav_csr:
         with st.container(border=True):
             st.markdown("#### 🧠 Mental Health & School Awareness")
             st.write("Free stress-management workshops, adolescent counseling, and preventive hygiene sessions conducted across government schools and colleges.")
+# ==============================================================================
+# TAB 6: CONTACT INFORMATION, GOOGLE MAPS & INSTITUTIONAL SITE MAP
+# ==============================================================================
+with nav_contact:
+    st.subheader("📍 Hospital Location, Contact Directory & Interactive Map")
 
+    c_info, c_map = st.columns((1, 1.4), gap="large")
+
+    with c_info:
+        with st.container(border=True):
+            st.markdown("### 🏥 Sunrise Multispecialty Hospital")
+            st.markdown(
+                "**Address:**\n"
+                "123 Health Boulevard, Wellness District,\n"
+                "Visakhapatnam – 530047, Andhra Pradesh, India"
+            )
+            st.divider()
+            st.markdown(
+                "**📞 24×7 Emergency & Ambulance:** `+91 891-255-8888`\n\n"
+                "**☎️ OPD Appointment Desk:** `+91 99999 88888`\n\n"
+                "**✉️ Clinical & Admin Support:** `care@sunrisemedical.in`\n\n"
+                "**🕒 OPD Consultation Hours:**\n"
+                "- Morning Shift: `09:00 AM – 02:00 PM`\n"
+                "- Evening Shift: `03:00 PM – 09:00 PM` (Mon – Sat)"
+            )
+            st.divider()
+            maps_directions_url = "https://www.google.com/maps/search/?api=1&query=Visakhapatnam+Multispecialty+Hospital+Andhra+Pradesh"
+            st.link_button("🧭 Open Turn-by-Turn Directions in Google Maps", maps_directions_url, type="primary", use_container_width=True)
+
+    with c_map:
+        with st.container(border=True):
+            st.markdown("### 🗺️ Interactive Campus Location (Google Maps)")
+            # API-key-free interactive Google Maps embed centered on Visakhapatnam
+            google_maps_embed_url = (
+                "https://maps.google.com/maps?q=Visakhapatnam%20Andhra%20Pradesh"
+                "&t=&z=13&ie=UTF8&iwloc=&output=embed"
+            )
+            st.components.v1.iframe(google_maps_embed_url, height=380, scrolling=False)
+            st.caption("Interactive map: Zoom or pan to explore nearby transit routes, pharmacies, and diagnostic centers.")
+
+    st.markdown("---")
+    st.subheader("🧭 Digital Health Portal — Complete Site Map")
+    st.caption("Structured architectural directory of patient services, role-based clinical workspaces, and institutional resources.")
+
+    sm1, sm2, sm3 = st.columns(3, gap="medium")
+
+    with sm1:
+        with st.container(border=True):
+            st.markdown("#### 🩺 Patient & Outpatient Services")
+            st.markdown(
+                "- **Patient Identity e-KYC (2FA):** 12-digit ID validation + Real Email OTP & Fernet PII encryption\n"
+                "- **AI Symptom Triage Assistant:** NLP symptom-to-specialty routing across 20+ clinical departments\n"
+                "- **Online Slot Booking:** Real-time Morning (`9 AM–2 PM`) & Evening (`3 PM–9 PM`) scheduling\n"
+                "- **Razorpay Payment Gateway:** Instant UPI/Card fee settlement & confirmation\n"
+                "- **e-Prescription Downloads:** Cryptographically verified PDF prescriptions"
+            )
+
+    with sm2:
+        with st.container(border=True):
+            st.markdown("#### 🔐 Role-Based Clinical & Ops Dashboards")
+            st.markdown(
+                "- **Doctor Dashboard (`/Doctor_Dashboard`):** Specialist schedules, diagnostics, QR-verified PDF e-Rx & HL7 FHIR R4 JSON export\n"
+                "- **Pharmacy Inventory (`/Pharmacy_Inventory`):** Live stock ledger, burn-rate runway forecasting & automated CSV Purchase Orders\n"
+                "- **Billing Dashboard (`/Billing_Dashboard`):** GST-compliant invoicing, consultation + pharmacy ledger\n"
+                "- **Admin Analytics (`/Admin_Analytics`):** KPI control panel, specialty disease analytics & SHA-256 hash-chained audit logs"
+            )
+
+    with sm3:
+        with st.container(border=True):
+            st.markdown("#### 🏛️ Institutional & Governance Pages")
+            st.markdown(
+                "- **About Us:** Hospital mission, vision, NABH quality standards & clinical overview\n"
+                "- **Administration:** Medical Director, CAO, Dean of Academics & Chief Pharmacist profiles\n"
+                "- **Corporate Social Responsibility (CSR):** Free rural health camps, maternal wellness & school programs\n"
+                "- **Patient Feedback:** Live satisfaction ratings & verified patient testimonials\n"
+                "- **Contact & Location:** Emergency helpline, OPD hours & interactive Google Maps integration"
+            )
 # ==============================================================================
 # TAB 5: PATIENT FEEDBACK
 # ==============================================================================
