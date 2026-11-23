@@ -87,12 +87,13 @@ if query_params.get("razorpay_payment_link_status") == "paid":
 render_hero(f"🏥 {HOSPITAL_TITLE}", HOSPITAL_SUBTITLE)
 
 # --- TOP INSTITUTIONAL NAVIGATION TABS ---
-nav_portal, nav_about, nav_admin, nav_csr, nav_feedback = st.tabs([
+nav_portal, nav_about, nav_admin, nav_csr, nav_feedback, nav_contact = st.tabs([
     "🩺 Book Appointment & Patient Portal",
     "🏛️ About Us",
     "👔 Administration",
     "🤝 Corporate Social Responsibility (CSR)",
-    "💬 Patient Feedback"
+    "💬 Patient Feedback",
+    "📍 Contact & Site Map"
 ])
 
 # ==============================================================================
