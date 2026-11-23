@@ -7,7 +7,11 @@ from utils import (
     ALL_TIME_SLOTS, load_clinical_data, apply_custom_ui,
     render_hero, init_db, build_prescription_pdf
 )
-
+from utils import (
+    ALL_TIME_SLOTS, load_clinical_data, apply_custom_ui,
+    render_hero, init_db, build_prescription_pdf,
+    is_valid_aadhaar_format, mask_and_hash_aadhaar, send_aadhaar_otp
+)
 HOSPITAL_TITLE = "Sunrise Multispecialty Hospital & E-Health Portal"
 HOSPITAL_SUBTITLE = "20+ Clinical Specialties • Digital Triage • Instant Slot Booking & E-Prescriptions"
 # Run once safely on startup in app.py
