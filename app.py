@@ -3,126 +3,43 @@ import pandas as pd
 import sqlite3
 import razorpay
 from datetime import datetime
-from security_utils import init_audit_table, encrypt_pii, decrypt_pii, mask_aadhar, log_audit_event, verify_audit_chain
-init_audit_table("your_database.db")
+
+HOSPITAL_TITLE = "Sunrise Multispecialty Hospital & E-Health Portal"
+HOSPITAL_SUBTITLE = "20+ Clinical Specialties • Digital Triage • Instant Slot Booking & E-Prescriptions"
+DB_PATH = "hospital_v2.db"
+
+st.set_page_config(page_title=HOSPITAL_TITLE, page_icon="🏥", layout="wide")
+
 from utils import (
     ALL_TIME_SLOTS, load_clinical_data, apply_custom_ui,
-    render_hero, init_db, build_prescription_pdf
+    render_hero, init_db, build_prescription_pdf, mask_and_hash_aadhaar
 )
-from demo_seeder import seed_portfolio_demo_data
-seed_portfolio_demo_data("hospital_v2.db")
-from utils import (
-    ALL_TIME_SLOTS, load_clinical_data, apply_custom_ui,
-    render_hero, init_db, build_prescription_pdf,
-    is_valid_aadhaar_format, mask_and_hash_aadhaar, send_aadhaar_otp
-)
+from security_utils import init_audit_table, encrypt_pii, mask_aadhar, log_audit_event
+from aadhaar_auth import is_valid_aadhaar_format, send_real_email_otp, verify_otp
 from ai_triage_engine import ClinicalAIEngine
-from security_utils import log_audit_event
+from demo_seeder import seed_portfolio_demo_data
+
+apply_custom_ui()
+init_db()
+init_audit_table(DB_PATH)
+seed_portfolio_demo_data(DB_PATH)
 
 @st.cache_resource
 def load_ai_engine():
     return ClinicalAIEngine()
-from aadhaar_auth import is_valid_aadhaar_format, trigger_sandbox_otp, verify_sandbox_otp
-from security_utils import encrypt_pii, mask_aadhar, log_audit_event
 
-aadhaar_input = st.text_input("Enter 12-Digit Aadhaar Number:", max_chars=14, placeholder="XXXX XXXX XXXX")
-
-if st.button("Send Verification OTP"):
-    valid, msg = is_valid_aadhaar_format(aadhaar_input, strict_checksum=False)
-    if valid:
-        otp_code = trigger_sandbox_otp()
-        st.info(f"📲 **Sandbox e-KYC Gateway:** Live UIDAI SMS is disabled in demo mode. Your test verification OTP is **`{otp_code}`**.")
-        log_audit_event("Patient_Portal", mask_aadhar(aadhaar_input), "OTP_DISPATCHED", "eKYC_Sandbox", db_path="hospital_v2.db")
-    else:
-        st.error(msg)
-
-if "sandbox_otp" in st.session_state:
-    entered_otp = st.text_input("Enter 6-Digit OTP:", max_chars=6)
-    if st.button("Verify & Authenticate"):
-        if verify_sandbox_otp(entered_otp):
-            st.session_state["aadhaar_verified"] = True
-            st.session_state["encrypted_aadhaar"] = encrypt_pii(aadhaar_input)
-            log_audit_event("Patient_Portal", mask_aadhar(aadhaar_input), "EKYC_VERIFIED", "Session_Authenticated", db_path="hospital_v2.db")
-            st.success("✅ Identity verified via e-KYC sandbox and encrypted in session!")
-        else:
-            st.error("❌ Incorrect OTP. Please check the sandbox code shown above.")
 ai_engine = load_ai_engine()
 
-with st.expander("🤖 AI Symptom-to-Specialty Triage & No-Show Risk Assistant", expanded=True):
-    symptoms = st.text_input("Describe patient symptoms (e.g., 'chest pain and shortness of breath' or 'knee joint swelling'):")
-    if symptoms:
-        recommendations = ai_engine.recommend_specialty(symptoms)
-        top_spec, confidence, urgency = recommendations[0]
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Recommended Department", top_spec)
-        col2.metric("NLP Match Confidence", f"{confidence}%")
-        col3.metric("Triage Priority", urgency)
-        
-        if len(recommendations) > 1:
-            alt_list = ", ".join([f"{s} ({c}%)" for s, c, _ in recommendations[1:]])
-            st.caption(f"Secondary differential departments: {alt_list}")
-        log_audit_event("AI_Triage", "Patient_Portal", "AI_SYMPTOM_TRIAGE", f"Dept:{top_spec}")
-HOSPITAL_TITLE = "Sunrise Multispecialty Hospital & E-Health Portal"
-HOSPITAL_SUBTITLE = "20+ Clinical Specialties • Digital Triage • Instant Slot Booking & E-Prescriptions"
-# Run once safely on startup in app.py
-conn = sqlite3.connect("hospital_v2.db")
-existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(appointments)").fetchall()}
+# Ensure schema extensions and feedback table exist on hospital_v2.db
+conn_init = sqlite3.connect(DB_PATH)
+existing_cols = {row[1] for row in conn_init.execute("PRAGMA table_info(appointments)").fetchall()}
 if "aadhaar_masked" not in existing_cols:
-    conn.execute("ALTER TABLE appointments ADD COLUMN aadhaar_masked TEXT DEFAULT 'Unverified'")
+    conn_init.execute("ALTER TABLE appointments ADD COLUMN aadhaar_masked TEXT DEFAULT 'Unverified'")
 if "aadhaar_hash" not in existing_cols:
-    conn.execute("ALTER TABLE appointments ADD COLUMN aadhaar_hash TEXT DEFAULT ''")
+    conn_init.execute("ALTER TABLE appointments ADD COLUMN aadhaar_hash TEXT DEFAULT ''")
 if "kyc_verified" not in existing_cols:
-    conn.execute("ALTER TABLE appointments ADD COLUMN kyc_verified INTEGER DEFAULT 0")
-conn.commit()
-conn.close()
-st.markdown("#### 🪪 Patient Identity Verification (Aadhaar e-KYC)")
-with st.container(border=True):
-    k1, k2 = st.columns([2, 1])
-    aadhaar_input = k1.text_input(
-        "12-Digit Aadhaar Number",
-        max_chars=14,
-        placeholder="Enter 12-digit Aadhaar (e.g. 2345 6789 0123)",
-        key="aadhaar_raw_input"
-    )
-    if k2.button("📲 Send OTP", use_container_width=True):
-        clean_num = "".join(c for c in aadhaar_input if c.isdigit())
-        if not is_valid_aadhaar_format(clean_num):
-            st.error("❌ Invalid Aadhaar number (failed 12-digit Verhoeff checksum).")
-        else:
-            otp_res = send_aadhaar_otp(clean_num)
-            st.session_state["kyc_ref_id"] = otp_res.get("ref_id")
-            st.session_state["kyc_pending_num"] = clean_num
-            st.session_state["kyc_verified"] = False
-            if otp_res.get("status") == "sandbox":
-                st.session_state["kyc_demo_otp"] = otp_res["demo_otp"]
-                st.info(f"🧪 **Sandbox Mode:** OTP sent to registered mobile (Demo OTP: **{otp_res['demo_otp']}**)")
-            else:
-                st.success("📩 OTP sent to Aadhaar-linked mobile number.")
+    conn_init.execute("ALTER TABLE appointments ADD COLUMN kyc_verified INTEGER DEFAULT 0")
 
-    if st.session_state.get("kyc_ref_id") and not st.session_state.get("kyc_verified"):
-        o1, o2 = st.columns([2, 1])
-        entered_otp = o1.text_input("Enter 6-Digit OTP", max_chars=6, key="aadhaar_otp_box")
-        if o2.button("✅ Verify OTP", use_container_width=True):
-            if entered_otp.strip() == st.session_state.get("kyc_demo_otp"):
-                masked, ref_hash = mask_and_hash_aadhaar(st.session_state["kyc_pending_num"])
-                st.session_state["kyc_verified"] = True
-                st.session_state["kyc_masked"] = masked
-                st.session_state["kyc_hash"] = ref_hash
-                # Clear raw digits from session state immediately after hashing
-                st.session_state.pop("kyc_pending_num", None)
-                st.success(f"🟢 Aadhaar e-KYC Verified ({masked})")
-            else:
-                st.error("❌ Incorrect OTP. Please try again.")
-
-    if st.session_state.get("kyc_verified"):
-        st.success(f"🛡️ **Identity Verified:** `{st.session_state['kyc_masked']}`")
-        
-st.set_page_config(page_title=HOSPITAL_TITLE, page_icon="🏥", layout="wide")
-apply_custom_ui()
-init_db()
-
-# Ensure feedback table exists even on existing DBs
-conn_init = sqlite3.connect("hospital_v2.db")
 conn_init.execute('''
     CREATE TABLE IF NOT EXISTS feedback (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -158,10 +75,11 @@ query_params = st.query_params
 if query_params.get("razorpay_payment_link_status") == "paid":
     appt_id = query_params.get("appt_id")
     if appt_id:
-        conn = sqlite3.connect("hospital_v2.db")
+        conn = sqlite3.connect(DB_PATH)
         conn.execute("UPDATE appointments SET status = 'Confirmed (Paid)' WHERE id = ?", (appt_id,))
         conn.commit()
         conn.close()
+        log_audit_event("Payment_Gateway", "Razorpay", "PAYMENT_CONFIRMED", f"Appt #{appt_id}", db_path=DB_PATH)
         st.success(f"🎉 Payment successful! Appointment #{appt_id} is now Confirmed.")
         st.query_params.clear()
 
@@ -178,9 +96,65 @@ nav_portal, nav_about, nav_admin, nav_csr, nav_feedback = st.tabs([
 ])
 
 # ==============================================================================
-# TAB 1: MAIN PATIENT PORTAL (20 SPECIALTIES, BOOKING & PRESCRIPTIONS)
+# TAB 1: MAIN PATIENT PORTAL (20 SPECIALTIES, E-KYC 2FA, AI TRIAGE & BOOKING)
 # ==============================================================================
 with nav_portal:
+    # 1. Unified Real-Time 2FA Identity Verification (Email OTP + Fernet Encryption)
+    st.markdown("#### 🪪 Patient Identity Verification (2FA e-KYC & PII Encryption)")
+    with st.container(border=True):
+        k1, k2, k3 = st.columns([1.4, 1.4, 0.8])
+        gov_id_input = k1.text_input(
+            "12-Digit Government / Health ID",
+            max_chars=14,
+            placeholder="e.g. 2345 6789 0123",
+            key="kyc_id_input"
+        )
+        kyc_email_input = k2.text_input(
+            "Registered Email (for Real OTP)",
+            placeholder="patient@example.com",
+            key="kyc_email_input"
+        )
+        k3.markdown("<br>", unsafe_allow_html=True)
+        if k3.button("📩 Send Real OTP", use_container_width=True):
+            clean_num = "".join(c for c in gov_id_input if c.isdigit())
+            valid, msg = is_valid_aadhaar_format(clean_num, strict_checksum=False)
+            if not valid:
+                st.error(f"❌ {msg}")
+            elif "@" not in kyc_email_input:
+                st.error("❌ Please enter a valid email address to receive the OTP.")
+            else:
+                sent, status_msg = send_real_email_otp(kyc_email_input.strip())
+                st.session_state["kyc_pending_num"] = clean_num
+                st.session_state["kyc_verified"] = False
+                if sent:
+                    st.success(f"✅ {status_msg}")
+                else:
+                    st.info(f"ℹ️ {status_msg}")
+                log_audit_event("Patient_Portal", mask_aadhar(clean_num), "REAL_OTP_SENT", kyc_email_input.strip(), db_path=DB_PATH)
+
+        if "active_otp" in st.session_state and not st.session_state.get("kyc_verified"):
+            o1, o2 = st.columns([2, 1])
+            entered_otp = o1.text_input("Enter 6-Digit OTP received in your email:", max_chars=6, key="kyc_otp_box")
+            o2.markdown("<br>", unsafe_allow_html=True)
+            if o2.button("✅ Verify & Encrypt ID", use_container_width=True):
+                if verify_otp(entered_otp):
+                    pending_digits = st.session_state.get("kyc_pending_num", "")
+                    masked, ref_hash = mask_and_hash_aadhaar(pending_digits)
+                    encrypted_val = encrypt_pii(pending_digits)
+                    st.session_state["kyc_verified"] = True
+                    st.session_state["kyc_masked"] = masked
+                    st.session_state["kyc_hash"] = ref_hash
+                    st.session_state["kyc_encrypted"] = encrypted_val
+                    st.session_state.pop("kyc_pending_num", None)
+                    log_audit_event("Patient_Portal", masked, "2FA_EKYC_VERIFIED", "Fernet_Encrypted", db_path=DB_PATH)
+                    st.success(f"🛡️ Identity Verified & Encrypted: `{masked}`")
+                else:
+                    st.error("❌ Incorrect OTP. Please check your inbox and try again.")
+
+        if st.session_state.get("kyc_verified"):
+            st.success(f"🔒 **Active Verified Session:** `{st.session_state['kyc_masked']}` (AES-128 Fernet Protected)")
+
+    st.markdown("---")
     st.subheader(f"🏥 Available Clinical Specialties ({len(specialty_cards)} Departments)")
     if "selected_specialty_doc" not in st.session_state:
         st.session_state["selected_specialty_doc"] = None
@@ -201,7 +175,24 @@ with nav_portal:
     col_left, col_right = st.columns((1.15, 1), gap="large")
 
     with col_left:
-        st.subheader("🩺 Step 1: Pre-Appointment Symptom Enquiry")
+        st.subheader("🩺 Step 1: AI Triage & Pre-Appointment Symptom Enquiry")
+        with st.expander("🤖 AI Symptom-to-Specialty NLP Triage Assistant", expanded=True):
+            free_text_symptoms = st.text_input(
+                "Describe symptoms in plain English (e.g., 'chest pain and shortness of breath' or 'knee joint swelling'):",
+                key="ai_free_text"
+            )
+            if free_text_symptoms:
+                recommendations = ai_engine.recommend_specialty(free_text_symptoms)
+                top_spec, confidence, urgency = recommendations[0]
+                ac1, ac2, ac3 = st.columns(3)
+                ac1.metric("AI Recommended Dept", top_spec)
+                ac2.metric("TF-IDF Match Score", f"{confidence}%")
+                ac3.metric("Triage Priority", urgency)
+                if len(recommendations) > 1:
+                    alt_list = ", ".join([f"{s} ({c}%)" for s, c, _ in recommendations[1:]])
+                    st.caption(f"Differential departments: {alt_list}")
+                log_audit_event("AI_Triage", "Patient_Portal", "AI_SYMPTOM_TRIAGE", f"Dept:{top_spec}", db_path=DB_PATH)
+
         with st.container(border=True):
             col_age, col_sym = st.columns((1, 2))
             with col_age:
@@ -209,268 +200,4 @@ with nav_portal:
             with col_sym:
                 if st.session_state["selected_specialty_doc"]:
                     dept_syms = rules_df[rules_df["doctor"] == st.session_state["selected_specialty_doc"]]["symptom"].unique().tolist()
-                    sym_options = dept_syms + [s for s in symptom_variants if s not in dept_syms]
-                else:
-                    sym_options = symptom_variants
-                selected_symptoms = st.multiselect("Current Symptoms", options=sym_options, placeholder="Select symptoms...")
-
-            col_s1, col_s2 = st.columns(2)
-            with col_s1:
-                duration = st.selectbox("Symptom Duration", ["Less than 24 hours", "1 - 3 days", "4 - 7 days", "More than a week"])
-            with col_s2:
-                severity = st.select_slider("Pain / Discomfort Severity", options=["Mild", "Moderate", "Severe"])
-
-            additional_details = st.text_input("Additional Notes or Allergies (Optional)", placeholder="e.g., Allergic to penicillin...")
-
-            default_doc = next(iter(specialty_doctors))
-            if p_age < 16:
-                recommended_doc = "Dr. Pradip (Pediatrics)"
-                st.info(f"🧸 **Pediatric Routing:** Patients under 16 are automatically routed to **{recommended_doc}**.")
-            elif st.session_state["selected_specialty_doc"]:
-                recommended_doc = st.session_state["selected_specialty_doc"]
-                r_col1, r_col2 = st.columns([3, 1])
-                r_col1.success(f"✅ **Selected Department:** **{recommended_doc}**")
-                if r_col2.button("Reset", use_container_width=True):
-                    st.session_state["selected_specialty_doc"] = None
-                    st.rerun()
-            elif selected_symptoms:
-                recommended_doc = symptom_to_doc.get(next(iter(selected_symptoms)), default_doc)
-                st.info(f"💡 **Recommended Specialist:** Based on your symptoms, we suggest **{recommended_doc}**.")
-            else:
-                recommended_doc = default_doc
-
-        st.markdown("---")
-        st.subheader("🗓️ Step 2: Confirm Appointment & Pay Consultation Fee")
-        default_idx = specialty_doctors.index(recommended_doc) if recommended_doc in specialty_doctors else 0
-        doctor_choice = st.selectbox("Assigned Department Specialist", specialty_doctors, index=default_idx)
-
-        consult_fee = float(fee_map.get(doctor_choice, 500.0))
-        st.info(f"💳 **Consultation Fee for {doctor_choice}:** ₹{consult_fee:,.2f}")
-
-        col_date, col_time = st.columns(2)
-        with col_date:
-            appointment_date = st.date_input("Select Appointment Date", min_value=datetime.today().date())
-
-        conn = sqlite3.connect("hospital_v2.db")
-        booked_df = pd.read_sql_query(
-            "SELECT appt_time FROM appointments WHERE doctor = ? AND appt_date = ? AND status != 'Cancelled'",
-            conn, params=(doctor_choice, str(appointment_date))
-        )
-        conn.close()
-        available_slots = [s for s in ALL_TIME_SLOTS if s not in set(booked_df["appt_time"].tolist())]
-
-        with col_time:
-            appointment_time = st.selectbox("Available Time Slot", available_slots) if available_slots else None
-            if not available_slots:
-                st.warning("No slots left on this date.")
-
-        with st.form("appointment_form", clear_on_submit=True):
-            col_n1, col_n2 = st.columns(2)
-            with col_n1:
-                patient_name = st.text_input("Full Patient Name", placeholder="e.g. Rahul Sharma")
-            with col_n2:
-                p_gender = st.selectbox("Gender", ["Male", "Female", "Other"])
-            p_contact = st.text_input("Registered Contact Number", placeholder="e.g. 9876543210")
-
-            if st.form_submit_button(f"Proceed to Pay ₹{consult_fee:,.0f} & Book", type="primary"):
-                if not patient_name.strip() or not p_contact.strip():
-                    st.error("Please enter both patient name and contact number.")
-                elif not selected_symptoms:
-                    st.warning("Please select at least one symptom in Step 1.")
-                elif not appointment_time:
-                    st.error("Please pick a date with open time slots.")
-                else:
-                    triage = f"[Severity: {severity} | Duration: {duration} | Age: {p_age}] Symptoms: {', '.join(selected_symptoms)}. Notes: {additional_details or 'None'}"
-                    conn = sqlite3.connect("hospital_v2.db")
-                    cur = conn.cursor()
-                    cur.execute(
-                        "INSERT INTO appointments (patient_name, patient_age, patient_gender, patient_contact, patient_problem, doctor, appt_date, appt_time, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (patient_name.strip(), p_age, p_gender, p_contact.strip(), triage, doctor_choice, str(appointment_date), appointment_time, "Awaiting Payment")
-                    )
-                    new_appt_id = cur.lastrowid
-                    conn.commit()
-                    conn.close()
-
-                    try:
-                        payment_data = {
-                            "amount": int(consult_fee * 100),
-                            "currency": "INR",
-                            "description": f"Consultation with {doctor_choice}",
-                            "customer": {
-                                "name": patient_name.strip(),
-                                "contact": p_contact.strip()
-                            },
-                            "notify": {"sms": False, "email": False},
-                            "callback_url": f"{APP_BASE_URL}?appt_id={new_appt_id}",
-                            "callback_method": "get"
-                        }
-                        payment_link = client.payment_link.create(payment_data)
-                        st.session_state["pending_payment_url"] = payment_link["short_url"]
-                        st.session_state["pending_appt_id"] = new_appt_id
-                    except Exception as e:
-                        st.error(f"Payment gateway error: {e}")
-
-        if "pending_payment_url" in st.session_state:
-            st.warning(f"Slot reserved (ID #{st.session_state['pending_appt_id']}). Complete payment below to confirm:")
-            st.link_button("💳 Pay Now via UPI / Card", st.session_state["pending_payment_url"], type="primary", use_container_width=True)
-
-    with col_right:
-        tab_req, tab_rx = st.tabs(["📋 Active Requests", "📄 Download Prescriptions & Notes"])
-        with tab_req:
-            conn = sqlite3.connect("hospital_v2.db")
-            df = pd.read_sql_query("SELECT id AS ID, patient_name AS [Patient Name], doctor AS Doctor, appt_date AS [Date], appt_time AS [Slot], status AS Status FROM appointments ORDER BY id DESC", conn)
-            conn.close()
-            st.dataframe(df, use_container_width=True, hide_index=True)
-
-        with tab_rx:
-            st.caption("Enter your full name and registered phone number to download your prescription PDF.")
-            v_name = st.text_input("Patient Full Name:", key="v_name")
-            v_phone = st.text_input("Registered Contact Number:", key="v_phone")
-            if v_name.strip() and v_phone.strip():
-                conn = sqlite3.connect("hospital_v2.db")
-                appt_check = pd.read_sql_query("SELECT patient_contact FROM appointments WHERE LOWER(TRIM(patient_name)) = LOWER(TRIM(?))", conn, params=(v_name,))
-                digits_in = "".join(c for c in v_phone if c.isdigit())
-                digits_db = {"".join(c for c in str(x) if c.isdigit()) for x in appt_check["patient_contact"].dropna()}
-                if (digits_in in digits_db and digits_in != "") or (not appt_check.empty and digits_db == {""} and v_phone.strip() == "0000"):
-                    rx_df = pd.read_sql_query("SELECT * FROM consultations WHERE LOWER(TRIM(patient_name)) = LOWER(TRIM(?)) ORDER BY id DESC", conn, params=(v_name,))
-                    conn.close()
-                    if rx_df.empty:
-                        st.info("No finalized prescriptions found for this patient yet.")
-                    for rec in rx_df.to_dict("records"):
-                        with st.container(border=True):
-                            st.markdown(f"**Date:** {rec['consultation_date']} | **Doctor:** {rec['doctor']}")
-                            st.markdown(f"**Diagnosis:** {rec['diagnosed_disease']}")
-                            st.info(f"💊 **Rx:** {rec['prescription']}")
-                            st.caption(f"📝 **Notes:** {rec['notes'] or 'None'}")
-                            pdf_bytes = build_prescription_pdf(
-                                rec["patient_name"],
-                                rec["doctor"],
-                                rec["diagnosed_disease"],
-                                rec["symptoms"],
-                                rec["prescription"],
-                                rec["notes"]
-                            )
-                            st.download_button(
-                                "📥 Download PDF",
-                                data=pdf_bytes,
-                                file_name=f"Rx_{rec['id']}.pdf",
-                                mime="application/pdf",
-                                key=f"dl_{rec['id']}"
-                            )
-                else:
-                    conn.close()
-                    st.error("❌ Verification failed. Check your name and phone number.")
-
-# ==============================================================================
-# TAB 2: ABOUT US
-# ==============================================================================
-with nav_about:
-    st.subheader(f"🏛️ About {HOSPITAL_TITLE}")
-    ab1, ab2 = st.columns((1.4, 1), gap="large")
-    with ab1:
-        with st.container(border=True):
-            st.markdown("### Excellence in Multispecialty Clinical Care & Digital Health")
-            st.write(
-                "Founded to bridge specialized medical expertise with seamless digital patient access, "
-                f"**{HOSPITAL_TITLE}** delivers comprehensive outpatient, diagnostic, and preventive healthcare "
-                "across **20 specialized clinical departments**. Our integrated E-Health platform empowers patients "
-                "with intelligent symptom-based specialist routing, transparent consultation fees, real-time slot "
-                "scheduling, and instant digital prescriptions."
-            )
-            st.markdown("#### 🎯 Our Mission & Vision")
-            st.markdown(
-                "- **Mission:** Provide ethical, affordable, and evidence-based medical care supported by modern digital health workflows.\n"
-                "- **Vision:** Become a benchmark community healthcare center known for clinical accuracy, zero-wait scheduling, and compassionate service.\n"
-                "- **OPD Consultation Hours:** Morning **09:00 AM – 02:00 PM** | Afternoon & Evening **03:00 PM – 09:00 PM** (Monday – Saturday)."
-            )
-    with ab2:
-        with st.container(border=True):
-            st.markdown("### 📊 Hospital at a Glance")
-            m1, m2 = st.columns(2)
-            m1.metric("Clinical Specialties", "20 Departments")
-            m2.metric("Pharmacy Formulas", "50+ Essential Drugs")
-            m3, m4 = st.columns(2)
-            m3.metric("Daily OPD Slots", "22 Slots / Specialist")
-            m4.metric("Emergency Support", "24 × 7 Triage")
-            st.info("📍 **Location:** 123 Health Boulevard, Wellness District, Visakhapatnam – 530047, AP\n\n📞 **Helpline:** +91 99999 88888 | ✉️ **Email:** care@sunrisemedical.in")
-
-# ==============================================================================
-# TAB 3: ADMINISTRATION
-# ==============================================================================
-with nav_admin:
-    st.subheader("👔 Hospital Administration & Governance")
-    st.caption("Leadership team overseeing clinical standards, hospital operations, nursing quality, and patient welfare.")
-    admin_leaders = [
-        ("Dr. M. Raghavendra Rao, MD", "Medical Director & Chief of Clinical Services", "25+ years in Internal Medicine & Hospital Quality Accreditation (NABH). Oversees clinical protocols across all 20 departments."),
-        ("Mrs. K. Padmavathi, MBA (Hosp. Admin)", "Chief Administrative Officer (CAO)", "Leads hospital operations, outpatient scheduling efficiency, billing transparency, and statutory healthcare compliance."),
-        ("Dr. S. Suryaprakasa Rao, MS", "Dean of Medical Academics & Clinical Audit", "Heads continuing medical education (CME), clinical peer audits, and diagnostic quality assurance."),
-        ("Mr. R. Venkatesh, M.Pharm", "Chief Pharmacist & Supply Chain Head", "Manages dispensary inventory, cold-chain storage, and essential medicine availability.")
-    ]
-    a_cols = st.columns(2, gap="medium")
-    for idx, (name, role, bio) in enumerate(admin_leaders):
-        with a_cols[idx % 2]:
-            with st.container(border=True):
-                st.markdown(f"#### {name}")
-                st.caption(f"**{role}**")
-                st.write(bio)
-
-# ==============================================================================
-# TAB 4: CORPORATE SOCIAL RESPONSIBILITY (CSR)
-# ==============================================================================
-with nav_csr:
-    st.subheader("🤝 Corporate Social Responsibility (CSR) & Community Health")
-    st.write("We believe quality healthcare is a community right. Through our structured CSR initiatives, our specialists dedicate regular clinical hours to underserved populations:")
-    c_cols = st.columns(3, gap="medium")
-    with c_cols[0]:
-        with st.container(border=True):
-            st.markdown("#### 🚐 Rural & Urban Free Health Camps")
-            st.write("Monthly multi-specialty screening camps offering free blood pressure, blood glucose, ECG, vision, and dental checkups in rural mandals and industrial colonies.")
-    with c_cols[1]:
-        with st.container(border=True):
-            st.markdown("#### 🤰 Maternal & Child Wellness Drive")
-            st.write("Subsidized antenatal checkups, nutritional supplements (Iron, Calcium, Folic Acid), and pediatric immunization awareness programs led by our Gynecology & Pediatrics teams.")
-    with c_cols[2]:
-        with st.container(border=True):
-            st.markdown("#### 🧠 Mental Health & School Awareness")
-            st.write("Free stress-management workshops, adolescent counseling, and preventive hygiene sessions conducted across government schools and colleges.")
-
-# ==============================================================================
-# TAB 5: PATIENT FEEDBACK
-# ==============================================================================
-with nav_feedback:
-    st.subheader("💬 Share Your Experience & Patient Feedback")
-    fb_left, fb_right = st.columns((1, 1.1), gap="large")
-    with fb_left:
-        with st.form("patient_feedback_form", clear_on_submit=True):
-            fb_name = st.text_input("Your Name", placeholder="e.g. Ananya Verma")
-            fb_dept = st.selectbox("Department Visited", ["General / Portal Experience"] + dept_list)
-            fb_rating = st.slider("Overall Satisfaction Rating (1 = Poor, 5 = Excellent)", min_value=1, max_value=5, value=5)
-            fb_comments = st.text_area("Your Comments or Suggestions", placeholder="Tell us about your consultation, wait time, or portal experience...", height=110)
-            if st.form_submit_button("📩 Submit Feedback", type="primary"):
-                if not fb_name.strip() or not fb_comments.strip():
-                    st.error("Please enter your name and feedback comments.")
-                else:
-                    conn = sqlite3.connect("hospital_v2.db")
-                    conn.execute(
-                        "INSERT INTO feedback (patient_name, department, rating, comments, submitted_at) VALUES (?, ?, ?, ?, ?)",
-                        (fb_name.strip(), fb_dept, int(fb_rating), fb_comments.strip(), datetime.now().strftime("%Y-%m-%d %H:%M"))
-                    )
-                    conn.commit()
-                    conn.close()
-                    st.success("🙏 Thank you! Your feedback has been recorded for our Quality Assurance team.")
-                    st.rerun()
-
-    with fb_right:
-        st.markdown("#### ⭐ Recent Patient Testimonials")
-        conn = sqlite3.connect("hospital_v2.db")
-        fb_df = pd.read_sql_query("SELECT patient_name, department, rating, comments, submitted_at FROM feedback ORDER BY id DESC LIMIT 6", conn)
-        conn.close()
-        if fb_df.empty:
-            st.info("Be the first to share feedback about your consultation experience!")
-        else:
-            for row in fb_df.to_dict("records"):
-                stars = "⭐" * int(row["rating"])
-                with st.container(border=True):
-                    st.markdown(f"**{row['patient_name']}** • *{row['department']}* — {stars}")
-                    st.write(row["comments"])
-                    st.caption(f"Submitted on {row['submitted_at']}")
+                    sym_options = dept_syms + [s for s in symptom_variants if s not in dept_syms
