@@ -20,46 +20,56 @@ from ai_triage_engine import ClinicalAIEngine
 from demo_seeder import seed_portfolio_demo_data
 
 apply_custom_ui()
-init_db()
-init_audit_table(DB_PATH)
-seed_portfolio_demo_data(DB_PATH)
+
+@st.cache_resource
+def initialize_system(db_path: str):
+    """Runs once per server boot instead of on every button click."""
+    init_db()
+    init_audit_table(db_path)
+    seed_portfolio_demo_data(db_path)
+
+    conn_init = sqlite3.connect(db_path)
+    existing_cols = {row[1] for row in conn_init.execute("PRAGMA table_info(appointments)").fetchall()}
+    if "aadhaar_masked" not in existing_cols:
+        conn_init.execute("ALTER TABLE appointments ADD COLUMN aadhaar_masked TEXT DEFAULT 'Unverified'")
+    if "aadhaar_hash" not in existing_cols:
+        conn_init.execute("ALTER TABLE appointments ADD COLUMN aadhaar_hash TEXT DEFAULT ''")
+    if "kyc_verified" not in existing_cols:
+        conn_init.execute("ALTER TABLE appointments ADD COLUMN kyc_verified INTEGER DEFAULT 0")
+
+    conn_init.execute('''
+        CREATE TABLE IF NOT EXISTS feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_name TEXT NOT NULL,
+            department TEXT NOT NULL,
+            rating INTEGER NOT NULL,
+            comments TEXT NOT NULL,
+            submitted_at TEXT NOT NULL
+        )
+    ''')
+    conn_init.commit()
+    conn_init.close()
+    return True
+
+@st.cache_data(ttl=3600)
+def get_cached_clinical_data():
+    """Caches the 20-specialty doctors and symptom rules DataFrames in memory."""
+    d_df, r_df = load_clinical_data()
+    d_df["doctor"] = d_df["doctor"].str.strip()
+    d_df["dept"] = d_df["dept"].str.strip()
+    r_df["doctor"] = r_df["doctor"].str.strip()
+    return d_df, r_df
 
 @st.cache_resource
 def load_ai_engine():
     return ClinicalAIEngine()
 
+initialize_system(DB_PATH)
+doctors_df, rules_df = get_cached_clinical_data()
 ai_engine = load_ai_engine()
-
-# Ensure schema extensions and feedback table exist on hospital_v2.db
-conn_init = sqlite3.connect(DB_PATH)
-existing_cols = {row[1] for row in conn_init.execute("PRAGMA table_info(appointments)").fetchall()}
-if "aadhaar_masked" not in existing_cols:
-    conn_init.execute("ALTER TABLE appointments ADD COLUMN aadhaar_masked TEXT DEFAULT 'Unverified'")
-if "aadhaar_hash" not in existing_cols:
-    conn_init.execute("ALTER TABLE appointments ADD COLUMN aadhaar_hash TEXT DEFAULT ''")
-if "kyc_verified" not in existing_cols:
-    conn_init.execute("ALTER TABLE appointments ADD COLUMN kyc_verified INTEGER DEFAULT 0")
-
-conn_init.execute('''
-    CREATE TABLE IF NOT EXISTS feedback (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        patient_name TEXT NOT NULL,
-        department TEXT NOT NULL,
-        rating INTEGER NOT NULL,
-        comments TEXT NOT NULL,
-        submitted_at TEXT NOT NULL
-    )
-''')
-conn_init.commit()
-conn_init.close()
 
 # Initialize Razorpay Client using Streamlit Secrets
 client = razorpay.Client(auth=(st.secrets["RAZORPAY_KEY_ID"], st.secrets["RAZORPAY_KEY_SECRET"]))
-
-doctors_df, rules_df = load_clinical_data()
-doctors_df["doctor"] = doctors_df["doctor"].str.strip()
-doctors_df["dept"] = doctors_df["dept"].str.strip()
-rules_df["doctor"] = rules_df["doctor"].str.strip()
 
 specialty_cards = doctors_df.to_dict("records")
 specialty_doctors = doctors_df["doctor"].tolist()
@@ -70,17 +80,36 @@ symptom_to_doc = dict(zip(rules_df["symptom"], rules_df["doctor"]))
 
 APP_BASE_URL = "https://patient-health-management.streamlit.app/"
 
-# --- HANDLE PAYMENT REDIRECT FROM RAZORPAY ---
+# --- HANDLE & CRYPTOGRAPHICALLY VERIFY RAZORPAY PAYMENT CALLBACK ---
 query_params = st.query_params
-if query_params.get("razorpay_payment_link_status") == "paid":
+if "razorpay_payment_id" in query_params and "razorpay_signature" in query_params:
     appt_id = query_params.get("appt_id")
-    if appt_id:
-        conn = sqlite3.connect(DB_PATH)
-        conn.execute("UPDATE appointments SET status = 'Confirmed (Paid)' WHERE id = ?", (appt_id,))
-        conn.commit()
-        conn.close()
-        log_audit_event("Payment_Gateway", "Razorpay", "PAYMENT_CONFIRMED", f"Appt #{appt_id}", db_path=DB_PATH)
-        st.success(f"🎉 Payment successful! Appointment #{appt_id} is now Confirmed.")
+    verify_payload = {
+        "payment_link_id": query_params.get("razorpay_payment_link_id", ""),
+        "payment_link_reference_id": query_params.get("razorpay_payment_link_reference_id", ""),
+        "payment_link_status": query_params.get("razorpay_payment_link_status", ""),
+        "razorpay_payment_id": query_params.get("razorpay_payment_id", ""),
+        "razorpay_signature": query_params.get("razorpay_signature", ""),
+    }
+    try:
+        client.utility.verify_payment_link_signature(verify_payload)
+        if appt_id and verify_payload["payment_link_status"] == "paid":
+            conn = sqlite3.connect(DB_PATH)
+            conn.execute("UPDATE appointments SET status = 'Confirmed (Paid)' WHERE id = ?", (appt_id,))
+            conn.commit()
+            conn.close()
+            log_audit_event(
+                "Payment_Gateway",
+                verify_payload["razorpay_payment_id"],
+                "RAZORPAY_SIGNATURE_VERIFIED",
+                f"Appt #{appt_id}",
+                db_path=DB_PATH
+            )
+            st.success(f"🔒 Cryptographically verified payment ({verify_payload['razorpay_payment_id']})! Appointment #{appt_id} is Confirmed.")
+    except razorpay.errors.SignatureVerificationError:
+        log_audit_event("Security_Alert", "Callback_Spoof_Attempt", "INVALID_RAZORPAY_SIGNATURE", f"Appt #{appt_id}", db_path=DB_PATH)
+        st.error("🚨 Security Alert: Invalid Razorpay payment signature detected. Appointment status was not updated.")
+    finally:
         st.query_params.clear()
 
 # --- HERO TITLE BANNER ---
@@ -100,7 +129,6 @@ nav_portal, nav_about, nav_admin, nav_csr, nav_feedback, nav_contact = st.tabs([
 # TAB 1: MAIN PATIENT PORTAL (20 SPECIALTIES, E-KYC 2FA, AI TRIAGE & BOOKING)
 # ==============================================================================
 with nav_portal:
-    # 1. Unified Real-Time 2FA Identity Verification (Email OTP + Fernet Encryption)
     st.markdown("#### 🪪 Patient Identity Verification (2FA e-KYC & PII Encryption)")
     with st.container(border=True):
         k1, k2, k3 = st.columns([1.4, 1.4, 0.8])
@@ -256,7 +284,6 @@ with nav_portal:
             if not available_slots:
                 st.warning("No slots left on this date.")
 
-        # ML No-Show Risk Prediction
         if appointment_time:
             lead_days = max(0, (appointment_date - datetime.today().date()).days)
             noshow_prob, noshow_label = ai_engine.predict_noshow_risk(p_age, lead_days, appointment_time)
@@ -305,253 +332,4 @@ with nav_portal:
                                 "name": patient_name.strip(),
                                 "contact": p_contact.strip()
                             },
-                            "notify": {"sms": False, "email": False},
-                            "callback_url": f"{APP_BASE_URL}?appt_id={new_appt_id}",
-                            "callback_method": "get"
-                        }
-                        payment_link = client.payment_link.create(payment_data)
-                        st.session_state["pending_payment_url"] = payment_link["short_url"]
-                        st.session_state["pending_appt_id"] = new_appt_id
-                    except Exception as e:
-                        st.error(f"Payment gateway error: {e}")
-
-        if "pending_payment_url" in st.session_state:
-            st.warning(f"Slot reserved (ID #{st.session_state['pending_appt_id']}). Complete payment below to confirm:")
-            st.link_button("💳 Pay Now via UPI / Card", st.session_state["pending_payment_url"], type="primary", use_container_width=True)
-
-    with col_right:
-        tab_req, tab_rx = st.tabs(["📋 Active Requests", "📄 Download Prescriptions & Notes"])
-        with tab_req:
-            conn = sqlite3.connect(DB_PATH)
-            df = pd.read_sql_query("SELECT id AS ID, patient_name AS [Patient Name], doctor AS Doctor, appt_date AS [Date], appt_time AS [Slot], aadhaar_masked AS [e-KYC ID], status AS Status FROM appointments ORDER BY id DESC", conn)
-            conn.close()
-            st.dataframe(df, use_container_width=True, hide_index=True)
-
-        with tab_rx:
-            st.caption("Enter your full name and registered phone number to download your prescription PDF.")
-            v_name = st.text_input("Patient Full Name:", key="v_name")
-            v_phone = st.text_input("Registered Contact Number:", key="v_phone")
-            if v_name.strip() and v_phone.strip():
-                conn = sqlite3.connect(DB_PATH)
-                appt_check = pd.read_sql_query("SELECT patient_contact FROM appointments WHERE LOWER(TRIM(patient_name)) = LOWER(TRIM(?))", conn, params=(v_name,))
-                digits_in = "".join(c for c in v_phone if c.isdigit())
-                digits_db = {"".join(c for c in str(x) if c.isdigit()) for x in appt_check["patient_contact"].dropna()}
-                if (digits_in in digits_db and digits_in != "") or (not appt_check.empty and digits_db == {""} and v_phone.strip() == "0000"):
-                    rx_df = pd.read_sql_query("SELECT * FROM consultations WHERE LOWER(TRIM(patient_name)) = LOWER(TRIM(?)) ORDER BY id DESC", conn, params=(v_name,))
-                    conn.close()
-                    if rx_df.empty:
-                        st.info("No finalized prescriptions found for this patient yet.")
-                    for rec in rx_df.to_dict("records"):
-                        with st.container(border=True):
-                            st.markdown(f"**Date:** {rec['consultation_date']} | **Doctor:** {rec['doctor']}")
-                            st.markdown(f"**Diagnosis:** {rec['diagnosed_disease']}")
-                            st.info(f"💊 **Rx:** {rec['prescription']}")
-                            st.caption(f"📝 **Notes:** {rec['notes'] or 'None'}")
-                            pdf_bytes = build_prescription_pdf(
-                                rec["patient_name"],
-                                rec["doctor"],
-                                rec["diagnosed_disease"],
-                                rec["symptoms"],
-                                rec["prescription"],
-                                rec["notes"]
-                            )
-                            st.download_button(
-                                "📥 Download PDF",
-                                data=pdf_bytes,
-                                file_name=f"Rx_{rec['id']}.pdf",
-                                mime="application/pdf",
-                                key=f"dl_{rec['id']}"
-                            )
-                else:
-                    conn.close()
-                    st.error("❌ Verification failed. Check your name and phone number.")
-
-# ==============================================================================
-# TAB 2: ABOUT US
-# ==============================================================================
-with nav_about:
-    st.subheader(f"🏛️ About {HOSPITAL_TITLE}")
-    ab1, ab2 = st.columns((1.4, 1), gap="large")
-    with ab1:
-        with st.container(border=True):
-            st.markdown("### Excellence in Multispecialty Clinical Care & Digital Health")
-            st.write(
-                "Founded to bridge specialized medical expertise with seamless digital patient access, "
-                f"**{HOSPITAL_TITLE}** delivers comprehensive outpatient, diagnostic, and preventive healthcare "
-                "across **20 specialized clinical departments**. Our integrated E-Health platform empowers patients "
-                "with intelligent symptom-based specialist routing, transparent consultation fees, real-time slot "
-                "scheduling, and instant digital prescriptions."
-            )
-            st.markdown("#### 🎯 Our Mission & Vision")
-            st.markdown(
-                "- **Mission:** Provide ethical, affordable, and evidence-based medical care supported by modern digital health workflows.\n"
-                "- **Vision:** Become a benchmark community healthcare center known for clinical accuracy, zero-wait scheduling, and compassionate service.\n"
-                "- **OPD Consultation Hours:** Morning **09:00 AM – 02:00 PM** | Afternoon & Evening **03:00 PM – 09:00 PM** (Monday – Saturday)."
-            )
-    with ab2:
-        with st.container(border=True):
-            st.markdown("### 📊 Hospital at a Glance")
-            m1, m2 = st.columns(2)
-            m1.metric("Clinical Specialties", "20 Departments")
-            m2.metric("Pharmacy Formulas", "50+ Essential Drugs")
-            m3, m4 = st.columns(2)
-            m3.metric("Daily OPD Slots", "22 Slots / Specialist")
-            m4.metric("Emergency Support", "24 × 7 Triage")
-            st.info("📍 **Location:** 123 Health Boulevard, Wellness District, Visakhapatnam – 530047, AP\n\n📞 **Helpline:** +91 99999 88888 | ✉️ **Email:** care@sunrisemedical.in")
-
-# ==============================================================================
-# TAB 3: ADMINISTRATION
-# ==============================================================================
-with nav_admin:
-    st.subheader("👔 Hospital Administration & Governance")
-    st.caption("Leadership team overseeing clinical standards, hospital operations, nursing quality, and patient welfare.")
-    admin_leaders = [
-        ("Dr. M. Raghavendra Rao, MD", "Medical Director & Chief of Clinical Services", "25+ years in Internal Medicine & Hospital Quality Accreditation (NABH). Oversees clinical protocols across all 20 departments."),
-        ("Mrs. K. Padmavathi, MBA (Hosp. Admin)", "Chief Administrative Officer (CAO)", "Leads hospital operations, outpatient scheduling efficiency, billing transparency, and statutory healthcare compliance."),
-        ("Dr. S. Suryaprakasa Rao, MS", "Dean of Medical Academics & Clinical Audit", "Heads continuing medical education (CME), clinical peer audits, and diagnostic quality assurance."),
-        ("Mr. R. Venkatesh, M.Pharm", "Chief Pharmacist & Supply Chain Head", "Manages dispensary inventory, cold-chain storage, and essential medicine availability.")
-    ]
-    a_cols = st.columns(2, gap="medium")
-    for idx, (name, role, bio) in enumerate(admin_leaders):
-        with a_cols[idx % 2]:
-            with st.container(border=True):
-                st.markdown(f"#### {name}")
-                st.caption(f"**{role}**")
-                st.write(bio)
-
-# ==============================================================================
-# TAB 4: CORPORATE SOCIAL RESPONSIBILITY (CSR)
-# ==============================================================================
-with nav_csr:
-    st.subheader("🤝 Corporate Social Responsibility (CSR) & Community Health")
-    st.write("We believe quality healthcare is a community right. Through our structured CSR initiatives, our specialists dedicate regular clinical hours to underserved populations:")
-    c_cols = st.columns(3, gap="medium")
-    with c_cols[0]:
-        with st.container(border=True):
-            st.markdown("#### 🚐 Rural & Urban Free Health Camps")
-            st.write("Monthly multi-specialty screening camps offering free blood pressure, blood glucose, ECG, vision, and dental checkups in rural mandals and industrial colonies.")
-    with c_cols[1]:
-        with st.container(border=True):
-            st.markdown("#### 🤰 Maternal & Child Wellness Drive")
-            st.write("Subsidized antenatal checkups, nutritional supplements (Iron, Calcium, Folic Acid), and pediatric immunization awareness programs led by our Gynecology & Pediatrics teams.")
-    with c_cols[2]:
-        with st.container(border=True):
-            st.markdown("#### 🧠 Mental Health & School Awareness")
-            st.write("Free stress-management workshops, adolescent counseling, and preventive hygiene sessions conducted across government schools and colleges.")
-# ==============================================================================
-# TAB 6: CONTACT INFORMATION, GOOGLE MAPS & INSTITUTIONAL SITE MAP
-# ==============================================================================
-with nav_contact:
-    st.subheader("📍 Hospital Location, Contact Directory & Interactive Map")
-
-    c_info, c_map = st.columns((1, 1.4), gap="large")
-
-    with c_info:
-        with st.container(border=True):
-            st.markdown("### 🏥 Sunrise Multispecialty Hospital")
-            st.markdown(
-                "**Address:**\n"
-                "123 Health Boulevard, Wellness District,\n"
-                "Visakhapatnam – 530047, Andhra Pradesh, India"
-            )
-            st.divider()
-            st.markdown(
-                "**📞 24×7 Emergency & Ambulance:** `+91 891-255-8888`\n\n"
-                "**☎️ OPD Appointment Desk:** `+91 99999 88888`\n\n"
-                "**✉️ Clinical & Admin Support:** `care@sunrisemedical.in`\n\n"
-                "**🕒 OPD Consultation Hours:**\n"
-                "- Morning Shift: `09:00 AM – 02:00 PM`\n"
-                "- Evening Shift: `03:00 PM – 09:00 PM` (Mon – Sat)"
-            )
-            st.divider()
-            maps_directions_url = "https://www.google.com/maps/search/?api=1&query=Visakhapatnam+Multispecialty+Hospital+Andhra+Pradesh"
-            st.link_button("🧭 Open Turn-by-Turn Directions in Google Maps", maps_directions_url, type="primary", use_container_width=True)
-
-    with c_map:
-        with st.container(border=True):
-            st.markdown("### 🗺️ Interactive Campus Location (Google Maps)")
-            # API-key-free interactive Google Maps embed centered on Visakhapatnam
-            google_maps_embed_url = (
-                "https://maps.google.com/maps?q=Visakhapatnam%20Andhra%20Pradesh"
-                "&t=&z=13&ie=UTF8&iwloc=&output=embed"
-            )
-            st.components.v1.iframe(google_maps_embed_url, height=380, scrolling=False)
-            st.caption("Interactive map: Zoom or pan to explore nearby transit routes, pharmacies, and diagnostic centers.")
-
-    st.markdown("---")
-    st.subheader("🧭 Digital Health Portal — Complete Site Map")
-    st.caption("Structured architectural directory of patient services, role-based clinical workspaces, and institutional resources.")
-
-    sm1, sm2, sm3 = st.columns(3, gap="medium")
-
-    with sm1:
-        with st.container(border=True):
-            st.markdown("#### 🩺 Patient & Outpatient Services")
-            st.markdown(
-                "- **Patient Identity e-KYC (2FA):** 12-digit ID validation + Real Email OTP & Fernet PII encryption\n"
-                "- **AI Symptom Triage Assistant:** NLP symptom-to-specialty routing across 20+ clinical departments\n"
-                "- **Online Slot Booking:** Real-time Morning (`9 AM–2 PM`) & Evening (`3 PM–9 PM`) scheduling\n"
-                "- **Razorpay Payment Gateway:** Instant UPI/Card fee settlement & confirmation\n"
-                "- **e-Prescription Downloads:** Cryptographically verified PDF prescriptions"
-            )
-
-    with sm2:
-        with st.container(border=True):
-            st.markdown("#### 🔐 Role-Based Clinical & Ops Dashboards")
-            st.markdown(
-                "- **Doctor Dashboard (`/Doctor_Dashboard`):** Specialist schedules, diagnostics, QR-verified PDF e-Rx & HL7 FHIR R4 JSON export\n"
-                "- **Pharmacy Inventory (`/Pharmacy_Inventory`):** Live stock ledger, burn-rate runway forecasting & automated CSV Purchase Orders\n"
-                "- **Billing Dashboard (`/Billing_Dashboard`):** GST-compliant invoicing, consultation + pharmacy ledger\n"
-                "- **Admin Analytics (`/Admin_Analytics`):** KPI control panel, specialty disease analytics & SHA-256 hash-chained audit logs"
-            )
-
-    with sm3:
-        with st.container(border=True):
-            st.markdown("#### 🏛️ Institutional & Governance Pages")
-            st.markdown(
-                "- **About Us:** Hospital mission, vision, NABH quality standards & clinical overview\n"
-                "- **Administration:** Medical Director, CAO, Dean of Academics & Chief Pharmacist profiles\n"
-                "- **Corporate Social Responsibility (CSR):** Free rural health camps, maternal wellness & school programs\n"
-                "- **Patient Feedback:** Live satisfaction ratings & verified patient testimonials\n"
-                "- **Contact & Location:** Emergency helpline, OPD hours & interactive Google Maps integration"
-            )
-# ==============================================================================
-# TAB 5: PATIENT FEEDBACK
-# ==============================================================================
-with nav_feedback:
-    st.subheader("💬 Share Your Experience & Patient Feedback")
-    fb_left, fb_right = st.columns((1, 1.1), gap="large")
-    with fb_left:
-        with st.form("patient_feedback_form", clear_on_submit=True):
-            fb_name = st.text_input("Your Name", placeholder="e.g. Ananya Verma")
-            fb_dept = st.selectbox("Department Visited", ["General / Portal Experience"] + dept_list)
-            fb_rating = st.slider("Overall Satisfaction Rating (1 = Poor, 5 = Excellent)", min_value=1, max_value=5, value=5)
-            fb_comments = st.text_area("Your Comments or Suggestions", placeholder="Tell us about your consultation, wait time, or portal experience...", height=110)
-            if st.form_submit_button("📩 Submit Feedback", type="primary"):
-                if not fb_name.strip() or not fb_comments.strip():
-                    st.error("Please enter your name and feedback comments.")
-                else:
-                    conn = sqlite3.connect(DB_PATH)
-                    conn.execute(
-                        "INSERT INTO feedback (patient_name, department, rating, comments, submitted_at) VALUES (?, ?, ?, ?, ?)",
-                        (fb_name.strip(), fb_dept, int(fb_rating), fb_comments.strip(), datetime.now().strftime("%Y-%m-%d %H:%M"))
-                    )
-                    conn.commit()
-                    conn.close()
-                    st.success("🙏 Thank you! Your feedback has been recorded for our Quality Assurance team.")
-                    st.rerun()
-
-    with fb_right:
-        st.markdown("#### ⭐ Recent Patient Testimonials")
-        conn = sqlite3.connect(DB_PATH)
-        fb_df = pd.read_sql_query("SELECT patient_name, department, rating, comments, submitted_at FROM feedback ORDER BY id DESC LIMIT 6", conn)
-        conn.close()
-        if fb_df.empty:
-            st.info("Be the first to share feedback about your consultation experience!")
-        else:
-            for row in fb_df.to_dict("records"):
-                stars = "⭐" * int(row["rating"])
-                with st.container(border=True):
-                    st.markdown(f"**{row['patient_name']}** • *{row['department']}* — {stars}")
-                    st.write(row["comments"])
-                    st.caption(f"Submitted on {row['submitted_at']}")
+                            "notify": {"sms": False, "
