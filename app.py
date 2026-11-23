@@ -1,26 +1,11 @@
-import streamlit as st
-import pandas as pd
-import sqlite3
-import razorpay
-from datetime import datetime
-import plotly.express as px
 import os
-if os.path.exists("assets/hospital_campus.png"):
-    st.image("assets/hospital_campus.png", caption="Govardhan Multispecialty Hospital — Simhachalam Hills Campus", use_container_width=True)
-st.markdown("---")
-st.subheader("📊 Clinical Departments & Consultation Fee Structure")
-fig_depts = px.bar(
-    doctors_df.sort_values("fee", ascending=True),
-    x="fee",
-    y="dept",
-    orientation="h",
-    color="fee",
-    color_continuous_scale="Teal",
-    labels={"fee": "OPD Consultation Fee (₹)", "dept": "Clinical Specialty"},
-    text_auto=True
-)
-fig_depts.update_layout(height=520, showlegend=False, coloraxis_showscale=False)
-st.plotly_chart(fig_depts, use_container_width=True)
+import sqlite3
+from datetime import datetime
+import pandas as pd
+import plotly.express as px
+import razorpay
+import streamlit as st
+
 HOSPITAL_TITLE = "Govardhan Multispecialty Hospital & E-Health Portal"
 HOSPITAL_SUBTITLE = "20+ Clinical Specialties • Digital Triage • Instant Slot Booking & E-Prescriptions"
 DB_PATH = "hospital_v2.db"
@@ -425,6 +410,9 @@ with nav_portal:
 # ==============================================================================
 with nav_about:
     st.subheader(f"🏛️ About {HOSPITAL_TITLE}")
+    if os.path.exists("assets/hospital_campus.png"):
+        st.image("assets/hospital_campus.png", caption="Govardhan Multispecialty Hospital — Simhachalam Hills Campus", use_container_width=True)
+
     ab1, ab2 = st.columns((1.4, 1), gap="large")
     with ab1:
         with st.container(border=True):
@@ -452,6 +440,21 @@ with nav_about:
             m3.metric("Daily OPD Slots", "22 Slots / Specialist")
             m4.metric("Emergency Support", "24 × 7 Triage")
             st.info("📍 **Location:** Simhachalam Hills, Simhachalam North, Visakhapatnam – 530029, AP\n\n📞 **Helpline:** +91 99999 88888 | ✉️ **Email:** care@govardhanmedical.in")
+
+    st.markdown("---")
+    st.subheader("📊 Clinical Departments & Consultation Fee Structure")
+    fig_depts = px.bar(
+        doctors_df.sort_values("fee", ascending=True),
+        x="fee",
+        y="dept",
+        orientation="h",
+        color="fee",
+        color_continuous_scale="Teal",
+        labels={"fee": "OPD Consultation Fee (₹)", "dept": "Clinical Specialty"},
+        text_auto=True
+    )
+    fig_depts.update_layout(height=520, showlegend=False, coloraxis_showscale=False)
+    st.plotly_chart(fig_depts, use_container_width=True)
 
 # ==============================================================================
 # TAB 3: ADMINISTRATION
@@ -518,20 +521,7 @@ with nav_feedback:
                     conn.close()
                     st.success("🙏 Thank you! Your feedback has been recorded for our Quality Assurance team.")
                     st.rerun()
-    if not fb_df.empty:
-        rating_counts = fb_df["rating"].value_counts().reset_index()
-        rating_counts.columns = ["Rating", "Count"]
-        rating_counts["Rating"] = rating_counts["Rating"].astype(str) + " ⭐"
-        fig_ratings = px.pie(
-        rating_counts,
-        names="Rating",
-        values="Count",
-        hole=0.5,
-        title="Patient Satisfaction Distribution",
-        color_discrete_sequence=px.colors.sequential.Tealgrn
-    )
-    fig_ratings.update_layout(height=260, margin=dict(t=40, b=10, l=10, r=10))
-    st.plotly_chart(fig_ratings, use_container_width=True)
+
     with fb_right:
         st.markdown("#### ⭐ Recent Patient Testimonials")
         conn = sqlite3.connect(DB_PATH)
@@ -551,6 +541,20 @@ with nav_feedback:
         if fb_df.empty:
             st.info("Be the first to share feedback about your consultation experience!")
         else:
+            rating_counts = fb_df["rating"].value_counts().reset_index()
+            rating_counts.columns = ["Rating", "Count"]
+            rating_counts["Rating"] = rating_counts["Rating"].astype(str) + " ⭐"
+            fig_ratings = px.pie(
+                rating_counts,
+                names="Rating",
+                values="Count",
+                hole=0.5,
+                title="Patient Satisfaction Distribution",
+                color_discrete_sequence=px.colors.sequential.Tealgrn
+            )
+            fig_ratings.update_layout(height=260, margin=dict(t=40, b=10, l=10, r=10))
+            st.plotly_chart(fig_ratings, use_container_width=True)
+
             for row in fb_df.to_dict("records"):
                 stars = "⭐" * int(row["rating"])
                 with st.container(border=True):
