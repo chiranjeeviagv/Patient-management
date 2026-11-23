@@ -4,3 +4,4 @@ plotly
 reportlab
 razorpay
 cryptography
+scikit-learn
