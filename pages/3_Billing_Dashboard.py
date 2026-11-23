@@ -10,10 +10,24 @@ apply_custom_ui()
 if require_login("Billing Dashboard", "billing123"):
     render_hero("💰 Patient Checkouts & Invoice Generator", "Process completed consultations with itemized pharmacy charges and 18% GST.")
     doctors_df, _ = load_clinical_data()
+    doctors_df["doctor"] = doctors_df["doctor"].str.strip()
     fee_map = dict(zip(doctors_df["doctor"], doctors_df["fee"]))
 
     conn = sqlite3.connect("hospital_v2.db")
-    unbilled_df = pd.read_sql_query("SELECT DISTINCT patient_name, doctor FROM appointments WHERE status = 'Completed' AND patient_name NOT IN (SELECT patient_name FROM billing)", conn)
+    unbilled_df = pd.read_sql_query(
+        """
+        SELECT DISTINCT a.patient_name, a.doctor
+        FROM appointments a
+        WHERE a.status = 'Completed'
+          AND NOT EXISTS (
+              SELECT 1 FROM billing b
+              WHERE b.patient_name = a.patient_name
+                AND b.doctor_assigned = a.doctor
+                AND DATE(b.billing_date) = DATE('now', 'localtime')
+          )
+        """,
+        conn
+    )
     conn.close()
 
     col1, col2 = st.columns(2, gap="large")
@@ -23,13 +37,23 @@ if require_login("Billing Dashboard", "billing123"):
             unbilled_df["label"] = unbilled_df["patient_name"] + " — " + unbilled_df["doctor"]
             selected = st.selectbox("Select Patient:", unbilled_df["label"].tolist())
             patient, doctor = selected.split(" — ", 1)
+            doctor_clean = doctor.strip()
 
             conn = sqlite3.connect("hospital_v2.db")
-            med_row = conn.execute("SELECT medicine_dispensed, medicine_cost FROM consultations WHERE patient_name = ? ORDER BY id DESC LIMIT 1", (patient,)).fetchone()
+            med_row = conn.execute(
+                "SELECT medicine_dispensed, medicine_cost FROM consultations WHERE patient_name = ? ORDER BY id DESC LIMIT 1",
+                (patient,)
+            ).fetchone()
             conn.close()
 
-            med_name, med_fee = (med_row, float(med_row)) if med_row else ("None", 0.0)
-            base_fee = float(fee_map.get(doctor, 500.0))
+            # FIXED: Properly unpack med_row[0] and med_row[1]
+            if med_row:
+                med_name = med_row[0] if med_row[0] else "None"
+                med_fee = float(med_row[1]) if med_row[1] is not None else 0.0
+            else:
+                med_name, med_fee = "None", 0.0
+
+            base_fee = float(fee_map.get(doctor_clean, 500.0))
             tax = round((base_fee + med_fee) * 0.18, 2)
             total = round(base_fee + med_fee + tax, 2)
 
@@ -44,22 +68,37 @@ if require_login("Billing Dashboard", "billing123"):
                 conn = sqlite3.connect("hospital_v2.db")
                 cur = conn.cursor()
                 now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-                cur.execute("INSERT INTO billing (patient_name, doctor_assigned, consultation_fee, medicine_fee, tax_amount, grand_total, payment_status, billing_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (patient, doctor, base_fee, med_fee, tax, total, f"Paid via {pay_method}", now_str))
+                cur.execute(
+                    "INSERT INTO billing (patient_name, doctor_assigned, consultation_fee, medicine_fee, tax_amount, grand_total, payment_status, billing_date) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (patient, doctor_clean, base_fee, med_fee, tax, total, f"Paid via {pay_method}", now_str)
+                )
                 inv_id = cur.lastrowid
                 conn.commit()
                 conn.close()
-                st.session_state["last_inv"] = (inv_id, patient, doctor, base_fee, med_fee, med_name, tax, total, f"Paid via {pay_method}", now_str)
+                st.session_state["last_inv"] = (inv_id, patient, doctor_clean, base_fee, med_fee, med_name, tax, total, f"Paid via {pay_method}", now_str)
                 st.rerun()
         else:
             st.info("✨ No pending unbilled checkouts.")
 
         if "last_inv" in st.session_state:
-            pdf_bytes = build_invoice_pdf(*st.session_state["last_inv"])
-            st.download_button("📥 Download Invoice PDF", data=pdf_bytes, file_name=f"Invoice_{st.session_state['last_inv']}.pdf", mime="application/pdf")
+            inv_tuple = st.session_state["last_inv"]
+            pdf_bytes = build_invoice_pdf(*inv_tuple)
+            # FIXED: Use inv_tuple[0] (invoice ID) instead of the entire tuple in filename
+            st.download_button(
+                "📥 Download Invoice PDF",
+                data=pdf_bytes,
+                file_name=f"Invoice_{inv_tuple[0]}.pdf",
+                mime="application/pdf"
+            )
 
     with col2:
         st.subheader("📜 Billing History")
         conn = sqlite3.connect("hospital_v2.db")
-        hist = pd.read_sql_query("SELECT id AS ID, patient_name AS Patient, grand_total AS [Total (₹)], payment_status AS Status, billing_date AS Date FROM billing ORDER BY id DESC", conn)
+        hist = pd.read_sql_query(
+            "SELECT id AS ID, patient_name AS Patient, doctor_assigned AS Doctor, grand_total AS [Total (₹)], payment_status AS Status, billing_date AS Date "
+            "FROM billing ORDER BY id DESC",
+            conn
+        )
         conn.close()
         st.dataframe(hist, use_container_width=True, hide_index=True)
