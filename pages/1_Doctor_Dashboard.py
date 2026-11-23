@@ -3,10 +3,51 @@ import pandas as pd
 import sqlite3
 from datetime import datetime
 from utils import load_clinical_data, apply_custom_ui, render_hero, require_login, build_prescription_pdf
-
+from clinical_interop import build_qr_verified_prescription_pdf, build_fhir_r4_bundle
+from security_utils import log_audit_event
 st.set_page_config(page_title="Doctor Dashboard", page_icon="🩺", layout="wide")
 apply_custom_ui()
+from clinical_interop import build_qr_verified_prescription_pdf, build_fhir_r4_bundle
+from security_utils import log_audit_event
 
+# Example using the selected/completed consultation variables:
+col_pdf, col_fhir = st.columns(2)
+
+with col_pdf:
+    pdf_bytes = build_qr_verified_prescription_pdf(
+        patient_name=patient_name,
+        age_gender=f"{patient_age} Y / {patient_gender}",
+        doctor_name=selected_doctor,
+        specialty=doctor_specialty,
+        diagnosis=diagnosed_disease,
+        medications=prescribed_medicines,
+        notes=doctor_notes
+    )
+    if st.download_button(
+        label="📄 Download QR-Verified e-Prescription (PDF)",
+        data=pdf_bytes,
+        file_name=f"eRx_{patient_name.replace(' ', '_')}.pdf",
+        mime="application/pdf",
+        use_container_width=True
+    ):
+        log_audit_event("Doctor", selected_doctor, "EXPORT_QR_PDF", patient_name, db_path="hospital_v2.db")
+
+with col_fhir:
+    fhir_json = build_fhir_r4_bundle(
+        patient_name=patient_name,
+        doctor_name=selected_doctor,
+        specialty=doctor_specialty,
+        diagnosis=diagnosed_disease,
+        medications=prescribed_medicines
+    )
+    if st.download_button(
+        label="🔗 Export HL7 FHIR R4 Bundle (JSON)",
+        data=fhir_json,
+        file_name=f"FHIR_{patient_name.replace(' ', '_')}.json",
+        mime="application/json",
+        use_container_width=True
+    ):
+        log_audit_event("Doctor", selected_doctor, "EXPORT_FHIR_JSON", patient_name, db_path="hospital_v2.db")
 if require_login("Doctor Dashboard", "doctor123"):
     render_hero("🩺 Medical Practitioner Workspace", "Manage daily patient schedules, review E-health logs, and issue digital prescriptions.")
     doctors_df, rules_df = load_clinical_data()
