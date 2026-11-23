@@ -503,21 +503,21 @@ with nav_feedback:
                     st.rerun()
 
             with fb_right:
-             st.markdown("#### ⭐ Recent Patient Testimonials")
-             conn = sqlite3.connect(DB_PATH)
-             conn.execute('''
-             CREATE TABLE IF NOT EXISTS feedback (
-             id INTEGER PRIMARY KEY AUTOINCREMENT,
-             patient_name TEXT NOT NULL,
-             department TEXT NOT NULL,
-             rating INTEGER NOT NULL,
-             comments TEXT NOT NULL,
-             submitted_at TEXT NOT NULL
-             )
-         ''')
-     conn.commit()
-     fb_df = pd.read_sql_query("SELECT patient_name, department, rating, comments, submitted_at FROM feedback ORDER BY id DESC LIMIT 6", conn)
-     conn.close()
+        st.markdown("#### ⭐ Recent Patient Testimonials")
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_name TEXT NOT NULL,
+                department TEXT NOT NULL,
+                rating INTEGER NOT NULL,
+                comments TEXT NOT NULL,
+                submitted_at TEXT NOT NULL
+            )
+        ''')
+        conn.commit()
+        fb_df = pd.read_sql_query("SELECT patient_name, department, rating, comments, submitted_at FROM feedback ORDER BY id DESC LIMIT 6", conn)
+        conn.close()
         if fb_df.empty:
             st.info("Be the first to share feedback about your consultation experience!")
         else:
