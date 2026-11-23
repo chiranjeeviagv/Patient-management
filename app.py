@@ -333,7 +333,7 @@ with nav_portal:
                                 "contact": p_contact.strip()
                             },
                             "notify": {"sms": False, "email": False},
-"callback_url": f"{APP_BASE_URL}?appt_id={new_appt_id}",
+                            "callback_url": f"{APP_BASE_URL}?appt_id={new_appt_id}",
                             "callback_method": "get"
                         }
                         payment_link = client.payment_link.create(payment_data)
@@ -349,20 +349,20 @@ with nav_portal:
     with col_right:
         tab_req, tab_rx = st.tabs(["📋 Active Requests", "📄 Download Prescriptions & Notes"])
         with tab_req:
-         conn = sqlite3.connect(DB_PATH)
-         cols = {r[1] for r in conn.execute("PRAGMA table_info(appointments)").fetchall()}
-         if "aadhaar_masked" not in cols:
-             conn.execute("ALTER TABLE appointments ADD COLUMN aadhaar_masked TEXT DEFAULT 'Unverified'")
-             conn.commit()
-         df = pd.read_sql_query(
-             "SELECT id AS ID, patient_name AS [Patient Name], doctor AS Doctor, "
-             "appt_date AS [Date], appt_time AS [Slot], "
-             "COALESCE(aadhaar_masked, 'Unverified') AS [e-KYC ID], status AS Status "
-             "FROM appointments ORDER BY id DESC",
-             conn
-         )
-         conn.close()
-         st.dataframe(df, use_container_width=True, hide_index=True)
+            conn = sqlite3.connect(DB_PATH)
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(appointments)").fetchall()}
+            if "aadhaar_masked" not in cols:
+                conn.execute("ALTER TABLE appointments ADD COLUMN aadhaar_masked TEXT DEFAULT 'Unverified'")
+                conn.commit()
+            df = pd.read_sql_query(
+                "SELECT id AS ID, patient_name AS [Patient Name], doctor AS Doctor, "
+                "appt_date AS [Date], appt_time AS [Slot], "
+                "COALESCE(aadhaar_masked, 'Unverified') AS [e-KYC ID], status AS Status "
+                "FROM appointments ORDER BY id DESC",
+                conn
+            )
+            conn.close()
+            st.dataframe(df, use_container_width=True, hide_index=True)
 
         with tab_rx:
             st.caption("Enter your full name and registered phone number to download your prescription PDF.")
@@ -502,7 +502,7 @@ with nav_feedback:
                     st.success("🙏 Thank you! Your feedback has been recorded for our Quality Assurance team.")
                     st.rerun()
 
-            with fb_right:
+    with fb_right:
         st.markdown("#### ⭐ Recent Patient Testimonials")
         conn = sqlite3.connect(DB_PATH)
         conn.execute('''
@@ -538,7 +538,7 @@ with nav_contact:
 
     with c_info:
         with st.container(border=True):
-            st.markdown("### 🏥 Sunrise Multispecialty Hospital")
+            st.markdown("### 🏥 Govardhan Multispecialty Hospital")
             st.markdown(
                 "**Address:**\n"
                 "Simhachalam Hills, Simhachalam North,\n"
@@ -548,21 +548,21 @@ with nav_contact:
             st.markdown(
                 "**📞 24×7 Emergency & Ambulance:** `+91 891-255-8888`\n\n"
                 "**☎️ OPD Appointment Desk:** `+91 99999 88888`\n\n"
-                "**✉️ Clinical & Admin Support:** `care@sunrisemedical.in`\n\n"
+                "**✉️ Clinical & Admin Support:** `care@govardhanmedical.in`\n\n"
                 "**🕒 OPD Consultation Hours:**\n"
                 "- Morning Shift: `09:00 AM – 02:00 PM`\n"
                 "- Evening Shift: `03:00 PM – 09:00 PM` (Mon – Sat)"
             )
             st.divider()
-            maps_directions_url = "https://www.google.com/maps/search/?api=1&query=Visakhapatnam+Multispecialty+Hospital+Andhra+Pradesh"
+            maps_directions_url = "https://www.google.com/maps/search/?api=1&query=Simhachalam+Hills+Visakhapatnam+Andhra+Pradesh"
             st.link_button("🧭 Open Turn-by-Turn Directions in Google Maps", maps_directions_url, type="primary", use_container_width=True)
 
     with c_map:
         with st.container(border=True):
             st.markdown("### 🗺️ Interactive Campus Location (Google Maps)")
             google_maps_embed_url = (
-                "https://maps.google.com/maps?q=Visakhapatnam%20Andhra%20Pradesh"
-                "&t=&z=13&ie=UTF8&iwloc=&output=embed"
+                "https://maps.google.com/maps?q=Simhachalam%20Hills%20Visakhapatnam"
+                "&t=&z=14&ie=UTF8&iwloc=&output=embed"
             )
             st.components.v1.iframe(google_maps_embed_url, height=380, scrolling=False)
             st.caption("Interactive map: Zoom or pan to explore nearby transit routes, pharmacies, and diagnostic centers.")
@@ -604,4 +604,3 @@ with nav_contact:
                 "- **Patient Feedback:** Live satisfaction ratings & verified patient testimonials\n"
                 "- **Contact & Location:** Emergency helpline, OPD hours & interactive Google Maps integration"
             )
-                            
