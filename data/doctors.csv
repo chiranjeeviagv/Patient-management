@@ -1,9 +1,10 @@
 dept,doctor,icon,desc,fee
-Pediatrics,Dr. Pradip (Pediatrics),🧸,Child & adolescent healthcare (Ages 0-15),600.0
-General Medicine,Dr. Sharma (General Medicine),🩺,Fever infections respiratory & primary care,500.0
-ENT,Dr. Rao (ENT),👂,Ear nose throat & sinus treatments,750.0
-Neurology,Dr. Sen (Neurology),🧠,Migraines seizures & nervous system care,1500.0
-Ophthalmology,Dr. Manish (Ophthalmology),👁️,Vision testing eye infections & glaucoma,700.0
-Psychology,Dr. Meera (Psychology),💬,Counseling behavioral therapy & stress management,900.0
-Psychiatry,Dr. Radha (Psychiatry),🌿,Clinical mental health & medication management,1000.0
-Gynecology,Dr. Anjali (Gynecology),🌸,Women's reproductive health & maternity care,850.0
+Pediatrics,Dr. Pradip (Pediatrics),🧸,Child & adolescent healthcare (Ages 0-15),600
+General Medicine,Dr. Sharma (General Medicine),🩺,Fever infections respiratory & primary care,500
+ENT,Dr. Varma (ENT),👂,Ear nose throat & sinus treatments,500
+Neurology,Dr. Pamod(Neurology),🧠,Migraines seizures & nervous system care,700
+Ophthalmology,Dr. Dhanya (Ophthalmology),👁️,Vision testing eye infections & glaucoma,600
+Psychology,Dr. Baba (Psychology),💬,Counseling behavioral therapy & stress management,500
+Psychiatry,Dr. Radha (Psychiatry),🌿,Clinical mental health & medication management,800
+Gynecology,Dr. Anjali (Gynecology),🌸,Women's reproductive health & maternity care,750
+Dental , Dr. Angel(Dentist), Tooth Related problems, Sental surgeon, 500
