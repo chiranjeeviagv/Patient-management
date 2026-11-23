@@ -332,4 +332,6 @@ with nav_portal:
                                 "name": patient_name.strip(),
                                 "contact": p_contact.strip()
                             },
-                            "notify": {"sms": False, "
+                            "notify": {"sms": False, "email": False},
+
+                            
