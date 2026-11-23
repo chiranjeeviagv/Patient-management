@@ -21,6 +21,48 @@ if "kyc_verified" not in existing_cols:
     conn.execute("ALTER TABLE appointments ADD COLUMN kyc_verified INTEGER DEFAULT 0")
 conn.commit()
 conn.close()
+st.markdown("#### 🪪 Patient Identity Verification (Aadhaar e-KYC)")
+with st.container(border=True):
+    k1, k2 = st.columns([2, 1])
+    aadhaar_input = k1.text_input(
+        "12-Digit Aadhaar Number",
+        max_chars=14,
+        placeholder="Enter 12-digit Aadhaar (e.g. 2345 6789 0123)",
+        key="aadhaar_raw_input"
+    )
+    if k2.button("📲 Send OTP", use_container_width=True):
+        clean_num = "".join(c for c in aadhaar_input if c.isdigit())
+        if not is_valid_aadhaar_format(clean_num):
+            st.error("❌ Invalid Aadhaar number (failed 12-digit Verhoeff checksum).")
+        else:
+            otp_res = send_aadhaar_otp(clean_num)
+            st.session_state["kyc_ref_id"] = otp_res.get("ref_id")
+            st.session_state["kyc_pending_num"] = clean_num
+            st.session_state["kyc_verified"] = False
+            if otp_res.get("status") == "sandbox":
+                st.session_state["kyc_demo_otp"] = otp_res["demo_otp"]
+                st.info(f"🧪 **Sandbox Mode:** OTP sent to registered mobile (Demo OTP: **{otp_res['demo_otp']}**)")
+            else:
+                st.success("📩 OTP sent to Aadhaar-linked mobile number.")
+
+    if st.session_state.get("kyc_ref_id") and not st.session_state.get("kyc_verified"):
+        o1, o2 = st.columns([2, 1])
+        entered_otp = o1.text_input("Enter 6-Digit OTP", max_chars=6, key="aadhaar_otp_box")
+        if o2.button("✅ Verify OTP", use_container_width=True):
+            if entered_otp.strip() == st.session_state.get("kyc_demo_otp"):
+                masked, ref_hash = mask_and_hash_aadhaar(st.session_state["kyc_pending_num"])
+                st.session_state["kyc_verified"] = True
+                st.session_state["kyc_masked"] = masked
+                st.session_state["kyc_hash"] = ref_hash
+                # Clear raw digits from session state immediately after hashing
+                st.session_state.pop("kyc_pending_num", None)
+                st.success(f"🟢 Aadhaar e-KYC Verified ({masked})")
+            else:
+                st.error("❌ Incorrect OTP. Please try again.")
+
+    if st.session_state.get("kyc_verified"):
+        st.success(f"🛡️ **Identity Verified:** `{st.session_state['kyc_masked']}`")
+        
 st.set_page_config(page_title=HOSPITAL_TITLE, page_icon="🏥", layout="wide")
 apply_custom_ui()
 init_db()
