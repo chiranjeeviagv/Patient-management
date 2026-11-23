@@ -2,9 +2,20 @@ dept,doctor,icon,desc,fee
 Pediatrics,Dr. Pradip (Pediatrics),🧸,Child & adolescent healthcare (Ages 0-15),600
 General Medicine,Dr. Sharma (General Medicine),🩺,Fever infections respiratory & primary care,500
 ENT,Dr. Varma (ENT),👂,Ear nose throat & sinus treatments,500
-Neurology,Dr. Pamod(Neurology),🧠,Migraines seizures & nervous system care,700
+Neurology,Dr. Pamod (Neurology),🧠,Migraines seizures & nervous system care,700
 Ophthalmology,Dr. Dhanya (Ophthalmology),👁️,Vision testing eye infections & glaucoma,600
-Psychology,Dr. Baba (Psychology),💬,Counseling behavioral therapy & stress management,500
+Psychology,Dr. Baba (Psychology),💭,Counseling behavioral therapy & stress management,500
 Psychiatry,Dr. Radha (Psychiatry),🌿,Clinical mental health & medication management,800
 Gynecology,Dr. Anjali (Gynecology),🌸,Women's reproductive health & maternity care,750
-Dental , Dr. Angel(Dentist), Tooth Related problems, Sental surgeon, 500
+Dental,Dr. Angel (Dentist),🦷,Tooth related problems & dental surgery,500
+Cardiology,Dr. Reddy (Cardiology),❤️,Heart conditions hypertension & ECG evaluation,900
+Dermatology,Dr. Kavita (Dermatology),🧴,Skin hair nail disorders & allergy care,600
+Orthopedics,Dr. Suresh (Orthopedics),🦴,Bone joint fractures & spine care,700
+Gastroenterology,Dr. Menon (Gastroenterology),🫁,Digestive liver & gastrointestinal care,800
+Pulmonology,Dr. Nair (Pulmonology),🌬️,Asthma COPD lung & respiratory medicine,750
+Endocrinology,Dr. Joshi (Endocrinology),🧬,Diabetes thyroid & hormonal disorders,800
+Nephrology,Dr. Iyer (Nephrology),💧,Kidney diseases dialysis & renal care,850
+Urology,Dr. Verma (Urology),🔬,Urinary tract prostate & renal stone care,750
+Oncology,Dr. Bose (Oncology),🎗️,Cancer screening diagnosis & chemotherapy care,1000
+Rheumatology,Dr. Kulkarni (Rheumatology),🦿,Autoimmune arthritis & chronic joint care,800
+Physiotherapy,Dr. Sneha (Physiotherapy),🏃,Physical rehabilitation sports injury & mobility,500
