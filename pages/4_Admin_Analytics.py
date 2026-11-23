@@ -3,41 +3,14 @@ import pandas as pd
 import plotly.express as px
 import sqlite3
 from utils import load_clinical_data, apply_custom_ui, render_hero, require_login
-is_valid, status_msg = verify_audit_chain("your_database.db")
-if is_valid:
-    st.success(f"🔒 {status_msg}")
-else:
-    st.error(f"🚨 {status_msg}")
+from security_utils import init_audit_table, verify_audit_chain, log_audit_event
+
 st.set_page_config(page_title="Admin Analytics", page_icon="📊", layout="wide")
 apply_custom_ui()
-import sqlite3
-import pandas as pd
-import streamlit as st
-from security_utils import verify_audit_chain, log_audit_event
 
-st.subheader("🛡️ Healthcare Cybersecurity & Tamper-Evident Audit Trail")
+DB_PATH = "hospital_v2.db"
+init_audit_table(DB_PATH)
 
-# 1. Verify SHA-256 Hash Chain Integrity
-is_valid, status_msg = verify_audit_chain("hospital.db")  # Replace with your exact SQLite filename
-if is_valid:
-    st.success(f"Cryptographic Chain Verified: {status_msg}")
-else:
-    st.error(f"Security Alert: {status_msg}")
-
-# 2. Display Recent Audit Logs
-conn = sqlite3.connect("hospital.db")
-audit_df = pd.read_sql_query(
-    "SELECT id, timestamp, actor_role, actor_id, action, target_record, substr(record_hash, 1, 16) || '...' AS sha256_signature FROM security_audit_logs ORDER BY id DESC LIMIT 15",
-    conn
-)
-conn.close()
-
-if not audit_df.empty:
-    st.dataframe(audit_df, use_container_width=True)
-else:
-    if st.button("Generate Genesis Security Log"):
-        log_audit_event("System_Admin", "G V Chiranjeevi Adari", "SYSTEM_INIT", "EHR_Security_Engine")
-        st.rerun()
 if require_login("Admin Analytics", "admin123"):
     render_hero("📊 Hospital Operational Control Panel", "Real-time booking metrics, revenue, and disease incidence analytics across 20 specialties.")
     
@@ -45,7 +18,7 @@ if require_login("Admin Analytics", "admin123"):
     doctors_df["doctor"] = doctors_df["doctor"].str.strip()
     doc_to_dept = dict(zip(doctors_df["doctor"], doctors_df["dept"].str.strip()))
 
-    conn = sqlite3.connect("hospital_v2.db")
+    conn = sqlite3.connect(DB_PATH)
     df_app = pd.read_sql_query("SELECT * FROM appointments", conn)
     df_cons = pd.read_sql_query("SELECT * FROM consultations", conn)
     df_bill = pd.read_sql_query("SELECT * FROM billing", conn)
@@ -58,7 +31,12 @@ if require_login("Admin Analytics", "admin123"):
     c3.metric("Completed", len(df_app[df_app["status"] == "Completed"]) if not df_app.empty else 0)
     c4.metric("Total Revenue", f"₹{df_bill['grand_total'].sum():,.2f}" if not df_bill.empty else "₹0.00")
 
-    tab_charts, tab_rev, tab_logs = st.tabs(["📈 Clinical & Specialty Analytics", "💰 Revenue Breakdown", "🗂️ Master Records"])
+    tab_charts, tab_rev, tab_logs, tab_sec = st.tabs([
+        "📈 Clinical & Specialty Analytics",
+        "💰 Revenue Breakdown",
+        "🗂️ Master Records",
+        "🛡️ Cybersecurity & Audit Trail"
+    ])
 
     with tab_charts:
         col_left, col_right = st.columns(2, gap="large")
@@ -132,3 +110,25 @@ if require_login("Admin Analytics", "admin123"):
         st.dataframe(df_cons, use_container_width=True, hide_index=True)
         st.subheader("Billing Ledger")
         st.dataframe(df_bill, use_container_width=True, hide_index=True)
+
+    with tab_sec:
+        st.subheader("🛡️ SHA-256 Hash-Chained EHR Audit Trail")
+        is_valid, status_msg = verify_audit_chain(DB_PATH)
+        if is_valid:
+            st.success(f"🔒 Cryptographic Chain Verified: {status_msg}")
+        else:
+            st.error(f"🚨 Security Alert: {status_msg}")
+
+        conn = sqlite3.connect(DB_PATH)
+        audit_df = pd.read_sql_query(
+            "SELECT id, timestamp, actor_role, actor_id, action, target_record, substr(record_hash, 1, 16) || '...' AS sha256_signature FROM security_audit_logs ORDER BY id DESC LIMIT 20",
+            conn
+        )
+        conn.close()
+
+        if not audit_df.empty:
+            st.dataframe(audit_df, use_container_width=True, hide_index=True)
+        else:
+            if st.button("Initialize Genesis Security Log"):
+                log_audit_event("Admin", "G V Chiranjeevi Adari", "SYSTEM_INIT", "hospital_v2.db", db_path=DB_PATH)
+                st.rerun()
