@@ -516,7 +516,20 @@ with nav_feedback:
                     conn.close()
                     st.success("🙏 Thank you! Your feedback has been recorded for our Quality Assurance team.")
                     st.rerun()
-
+    if not fb_df.empty:
+        rating_counts = fb_df["rating"].value_counts().reset_index()
+        rating_counts.columns = ["Rating", "Count"]
+        rating_counts["Rating"] = rating_counts["Rating"].astype(str) + " ⭐"
+        fig_ratings = px.pie(
+        rating_counts,
+        names="Rating",
+        values="Count",
+        hole=0.5,
+        title="Patient Satisfaction Distribution",
+        color_discrete_sequence=px.colors.sequential.Tealgrn
+    )
+    fig_ratings.update_layout(height=260, margin=dict(t=40, b=10, l=10, r=10))
+    st.plotly_chart(fig_ratings, use_container_width=True)
     with fb_right:
         st.markdown("#### ⭐ Recent Patient Testimonials")
         conn = sqlite3.connect(DB_PATH)
