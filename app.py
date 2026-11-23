@@ -22,7 +22,30 @@ from security_utils import log_audit_event
 @st.cache_resource
 def load_ai_engine():
     return ClinicalAIEngine()
+from aadhaar_auth import is_valid_aadhaar_format, trigger_sandbox_otp, verify_sandbox_otp
+from security_utils import encrypt_pii, mask_aadhar, log_audit_event
 
+aadhaar_input = st.text_input("Enter 12-Digit Aadhaar Number:", max_chars=14, placeholder="XXXX XXXX XXXX")
+
+if st.button("Send Verification OTP"):
+    valid, msg = is_valid_aadhaar_format(aadhaar_input, strict_checksum=False)
+    if valid:
+        otp_code = trigger_sandbox_otp()
+        st.info(f"📲 **Sandbox e-KYC Gateway:** Live UIDAI SMS is disabled in demo mode. Your test verification OTP is **`{otp_code}`**.")
+        log_audit_event("Patient_Portal", mask_aadhar(aadhaar_input), "OTP_DISPATCHED", "eKYC_Sandbox", db_path="hospital_v2.db")
+    else:
+        st.error(msg)
+
+if "sandbox_otp" in st.session_state:
+    entered_otp = st.text_input("Enter 6-Digit OTP:", max_chars=6)
+    if st.button("Verify & Authenticate"):
+        if verify_sandbox_otp(entered_otp):
+            st.session_state["aadhaar_verified"] = True
+            st.session_state["encrypted_aadhaar"] = encrypt_pii(aadhaar_input)
+            log_audit_event("Patient_Portal", mask_aadhar(aadhaar_input), "EKYC_VERIFIED", "Session_Authenticated", db_path="hospital_v2.db")
+            st.success("✅ Identity verified via e-KYC sandbox and encrypted in session!")
+        else:
+            st.error("❌ Incorrect OTP. Please check the sandbox code shown above.")
 ai_engine = load_ai_engine()
 
 with st.expander("🤖 AI Symptom-to-Specialty Triage & No-Show Risk Assistant", expanded=True):
