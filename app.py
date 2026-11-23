@@ -4,7 +4,9 @@ import sqlite3
 import razorpay
 from datetime import datetime
 import plotly.express as px
-
+import os
+if os.path.exists("assets/hospital_campus.png"):
+    st.image("assets/hospital_campus.png", caption="Govardhan Multispecialty Hospital — Simhachalam Hills Campus", use_container_width=True)
 st.markdown("---")
 st.subheader("📊 Clinical Departments & Consultation Fee Structure")
 fig_depts = px.bar(
