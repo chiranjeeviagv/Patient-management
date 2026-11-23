@@ -3,7 +3,22 @@ import pandas as pd
 import sqlite3
 import razorpay
 from datetime import datetime
+import plotly.express as px
 
+st.markdown("---")
+st.subheader("📊 Clinical Departments & Consultation Fee Structure")
+fig_depts = px.bar(
+    doctors_df.sort_values("fee", ascending=True),
+    x="fee",
+    y="dept",
+    orientation="h",
+    color="fee",
+    color_continuous_scale="Teal",
+    labels={"fee": "OPD Consultation Fee (₹)", "dept": "Clinical Specialty"},
+    text_auto=True
+)
+fig_depts.update_layout(height=520, showlegend=False, coloraxis_showscale=False)
+st.plotly_chart(fig_depts, use_container_width=True)
 HOSPITAL_TITLE = "Govardhan Multispecialty Hospital & E-Health Portal"
 HOSPITAL_SUBTITLE = "20+ Clinical Specialties • Digital Triage • Instant Slot Booking & E-Prescriptions"
 DB_PATH = "hospital_v2.db"
