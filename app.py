@@ -3,7 +3,7 @@ import razorpay
 import streamlit as st
 
 HOSPITAL_TITLE = "Govardhan Multispecialty Hospital & E-Health Portal"
-HOSPITAL_SUBTITLE = "20+ Clinical Specialties • Online & Offline OPD • Surgical IPD & OT Care"
+HOSPITAL_SUBTITLE = "30 Clinical Specialties • Online & Offline OPD • Surgical IPD & OT Care"
 DB_PATH = "hospital_v2.db"
 
 st.set_page_config(page_title=HOSPITAL_TITLE, page_icon="🏥", layout="wide")
