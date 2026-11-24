@@ -49,7 +49,7 @@ def render():
             st.markdown(
                 "- **3 Care Modes:** Offline OPD, Online Video Tele-Consultation & In-Hospital Surgical IPD/OT Packages\n"
                 "- **Patient Identity e-KYC (2FA):** 12-digit ID validation + Real Email OTP & Fernet PII encryption\n"
-                "- **AI Symptom Triage Assistant:** NLP symptom-to-specialty routing across 20+ clinical departments\n"
+                "- **AI Symptom Triage Assistant:** NLP symptom-to-specialty routing across 30 clinical departments\n"
                 "- **Razorpay Payment Gateway:** Instant OPD/Tele-Consult fee & Surgical IPD deposit settlement\n"
                 "- **e-Prescription & Discharge PDFs:** Cryptographically verified PDF downloads"
             )
