@@ -3,6 +3,7 @@ pandas
 plotly
 cryptography
 scikit-learn
+reportlab
 fpdf2
 qrcode[pil]
 razorpay
