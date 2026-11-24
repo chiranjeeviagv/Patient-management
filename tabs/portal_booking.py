@@ -287,6 +287,15 @@ def render(db_path: str, doctors_df, rules_df, ai_engine, client):
         with st.expander("🤖 AI Symptom-to-Specialty NLP Triage Assistant", expanded=True):
             free_text_symptoms = st.text_input("Describe symptoms in plain English:", key="ai_free_text")
             if free_text_symptoms:
+                red_flags = [
+                    "chest pain", "stroke", "unconscious", "severe bleeding",
+                    "can't breathe", "cannot breathe", "seizure", "heart attack"
+                ]
+                if any(flag in free_text_symptoms.lower() for flag in red_flags):
+                    st.error(
+                        "🚨 **EMERGENCY RED-FLAG DETECTED:** Call 24×7 Emergency Ambulance (`+91 891-255-8888`) "
+                        "or visit the Simhachalam Hills Trauma Bay immediately. Do not wait for an online slot."
+                    )
                 recommendations = ai_engine.recommend_specialty(free_text_symptoms)
                 top_spec, confidence, urgency = recommendations[0]
                 ac1, ac2, ac3 = st.columns(3)
@@ -296,6 +305,7 @@ def render(db_path: str, doctors_df, rules_df, ai_engine, client):
                 if len(recommendations) > 1:
                     alt_list = ", ".join([f"{s} ({c}%)" for s, c, _ in recommendations[1:]])
                     st.caption(f"Differential departments: {alt_list}")
+                st.caption("⚕️ *Clinical Decision Support Only: AI routing assists department selection and does not constitute a medical diagnosis.*")
                 log_audit_event("AI_Triage", "Patient_Portal", "AI_SYMPTOM_TRIAGE", f"Dept:{top_spec}", db_path=db_path)
 
         with st.container(border=True):
@@ -514,14 +524,3 @@ def render(db_path: str, doctors_df, rules_df, ai_engine, client):
                 else:
                     conn.close()
                     st.error("❌ Verification failed. Check your name and phone number.")
-                    if free_text_symptoms:
-                red_flags = ["chest pain", "stroke", "unconscious", "severe bleeding", "can't breathe", "cannot breathe", "seizure", "heart attack"]
-                if any(flag in free_text_symptoms.lower() for flag in red_flags):
-                    st.error("🚨 **EMERGENCY RED-FLAG DETECTED:** Call 24×7 Emergency Ambulance (`+91 891-255-8888`) or visit the Simhachalam Hills Trauma Bay immediately. Do not wait for an online slot.")
-                recommendations = ai_engine.recommend_specialty(free_text_symptoms)
-                top_spec, confidence, urgency = recommendations[0]
-                ac1, ac2, ac3 = st.columns(3)
-                ac1.metric("AI Recommended Dept", top_spec)
-                ac2.metric("TF-IDF Match Score", f"{confidence}%")
-                ac3.metric("Triage Priority", urgency)
-                st.caption("⚕️ *Clinical Decision Support Only: AI routing assists department selection and does not constitute a medical diagnosis.*")
