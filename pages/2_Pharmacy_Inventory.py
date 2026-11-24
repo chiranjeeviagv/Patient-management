@@ -226,7 +226,21 @@ if require_login("Pharmacy Inventory", "pharma123"):
                         conn.commit()
                         log_audit_event("Pharmacist", "Dispensary_Desk", "ADD_NEW_MEDICINE", new_name.strip(), db_path=DB_PATH)
                         st.success(f"Added '{new_name.strip()}' to inventory!")
-                        st.rerun()
+NEW_SPECIALTY_MEDICINES = [
+    ("Potassium Citrate Syr.", "Urology", 85, 145.0, "2027-08-31"),
+    ("Hydroxychloroquine 200mg", "Rheumatology", 110, 180.0, "2027-10-15"),
+    ("Ferrous Ascorbate", "Hematology", 150, 160.0, "2027-11-30"),
+    ("Diosmin 500mg", "Vascular Surgery", 75, 290.0, "2027-07-31"),
+    ("Silicone Scar Gel", "Plastic Surgery", 40, 550.0, "2027-09-30"),
+    ("Donepezil 5mg", "Geriatrics", 65, 240.0, "2027-12-31"),
+    ("Gabapentin 300mg", "Neurosurgery", 95, 210.0, "2027-08-15"),
+    ("Atorvastatin 40mg", "Cardiothoracic Surgery", 140, 195.0, "2027-10-31"),
+    ("Ursodeoxycholic Acid", "Hepatology", 70, 380.0, "2027-06-30"),
+    ("Duloxetine 30mg", "Pain & Palliative Care", 80, 225.0, "2027-09-15"),
+    ("Nitrofurantoin 100mg", "Urology", 90, 135.0, "2027-07-15"),
+    ("Clopidogrel 75mg", "Cardiothoracic Surgery", 120, 175.0, "2027-11-15"),
+    ("Surgical Consumables & Dressing Kit", "General Surgery / OT", 60, 450.0, "2028-01-31"),
+]                        st.rerun()
                     conn.close()
                 else:
                     st.error("Please enter a valid medicine name.")
