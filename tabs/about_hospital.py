@@ -14,7 +14,7 @@ def render(hospital_title: str, doctors_df):
             st.write(
                 "Founded to bridge specialized medical expertise with seamless digital patient access and modern clinical governance, "
                 f"**{hospital_title}** delivers comprehensive **Offline OPD Consultations**, **24×7 Tele-Medicine**, "
-                "and **In-Hospital Surgical & Critical Care** across "across **30 specialized clinical departments** "
+                "and **In-Hospital Surgical & Critical Care** across **30 specialized clinical departments**."
             )
             st.markdown("#### 🏥 Clinical & Surgical Infrastructure")
             st.markdown(
@@ -45,5 +45,5 @@ def render(hospital_title: str, doctors_df):
         labels={"fee": "Offline OPD Fee (₹) [Online Video: 20% Off]", "dept": "Clinical Specialty"},
         text_auto=True
     )
-    fig_depts.update_layout(height=520, showlegend=False, coloraxis_showscale=False)
+    fig_depts.update_layout(height=680, showlegend=False, coloraxis_showscale=False)
     st.plotly_chart(fig_depts, use_container_width=True)
