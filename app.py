@@ -31,7 +31,10 @@ def initialize_system(db_path: str):
         ("aadhaar_hash", "TEXT DEFAULT ''"),
         ("kyc_verified", "INTEGER DEFAULT 0"),
         ("care_mode", "TEXT DEFAULT 'Offline OPD Consultation'"),
-        ("service_package", "TEXT DEFAULT 'Standard OPD'")
+        ("service_package", "TEXT DEFAULT 'Standard OPD'"),
+        ("patient_email", "TEXT DEFAULT ''"),
+        ("preferred_tele_time", "TEXT DEFAULT ''"),
+        ("tele_room_link", "TEXT DEFAULT ''"),
     ]:
         if col not in cols:
             conn.execute(f"ALTER TABLE appointments ADD COLUMN {col} {ddl}")
@@ -56,8 +59,15 @@ doctors_df, rules_df = get_cached_clinical_data()
 ai_engine = load_ai_engine()
 client = razorpay.Client(auth=(st.secrets["RAZORPAY_KEY_ID"], st.secrets["RAZORPAY_KEY_SECRET"]))
 
-# --- CRYPTOGRAPHICALLY VERIFY RAZORPAY PAYMENT CALLBACK ---
 query_params = st.query_params
+
+# --- HANDLE UNIQUE TELE-CONSULTATION ROOM LINK (?tele_room=GMH-...) ---
+if "tele_room" in query_params:
+    room_code = query_params.get("tele_room")
+    st.info(f"📹 **Welcome to Govardhan Tele-Health Room (`{room_code}`)** — Please allow Camera and Microphone permissions below to connect with your specialist.")
+    portal_booking._render_av_permission_widget(f"https://meet.govardhanmedical.in/{room_code}")
+
+# --- CRYPTOGRAPHICALLY VERIFY RAZORPAY PAYMENT CALLBACK ---
 if "razorpay_payment_id" in query_params and "razorpay_signature" in query_params:
     appt_id = query_params.get("appt_id")
     verify_payload = {
@@ -72,10 +82,14 @@ if "razorpay_payment_id" in query_params and "razorpay_signature" in query_param
         if appt_id and verify_payload["payment_link_status"] == "paid":
             conn = sqlite3.connect(DB_PATH)
             conn.execute("UPDATE appointments SET status = 'Confirmed (Paid)' WHERE id = ?", (appt_id,))
+            row = conn.execute("SELECT care_mode FROM appointments WHERE id = ?", (appt_id,)).fetchone()
             conn.commit()
             conn.close()
             log_audit_event("Payment_Gateway", verify_payload["razorpay_payment_id"], "RAZORPAY_SIGNATURE_VERIFIED", f"Appt #{appt_id}", db_path=DB_PATH)
-            st.success(f"🔒 Verified payment ({verify_payload['razorpay_payment_id']})! Booking #{appt_id} is Confirmed.")
+            if row and "Online" in row[0]:
+                st.session_state["confirmed_tele_appt_id"] = int(appt_id)
+            else:
+                st.success(f"🔒 Verified payment ({verify_payload['razorpay_payment_id']})! Booking #{appt_id} is Confirmed.")
     except razorpay.errors.SignatureVerificationError:
         log_audit_event("Security_Alert", "Callback_Spoof_Attempt", "INVALID_RAZORPAY_SIGNATURE", f"Appt #{appt_id}", db_path=DB_PATH)
         st.error("🚨 Security Alert: Invalid Razorpay signature detected.")
