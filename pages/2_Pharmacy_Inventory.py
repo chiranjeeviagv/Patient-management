@@ -11,7 +11,7 @@ apply_custom_ui()
 
 DB_PATH = "hospital_v2.db"
 
-# Default catalog mapping for specialty medicines (Category, Default INR Price)
+# Default catalog mapping for all 30 specialty medicines (Category, Default INR Price)
 NEW_MEDICINE_CATALOG = {
     "Telmisartan 40mg": ("Cardiology", 145.0),
     "Torsemide 10mg": ("Cardiology", 95.0),
@@ -26,14 +26,25 @@ NEW_MEDICINE_CATALOG = {
     "Metformin 500mg": ("Endocrinology", 65.0),
     "Levothyroxine 50mcg": ("Endocrinology", 115.0),
     "Renal Diet Protocol": ("Nephrology", 250.0),
-    "Potassium Citrate Syr.": ("Nephrology", 140.0),
+    "Potassium Citrate Syr.": ("Urology", 145.0),
     "Tamsulosin 0.4mg": ("Urology", 210.0),
-    "Nitrofurantoin 100mg": ("Urology", 125.0),
+    "Nitrofurantoin 100mg": ("Urology", 135.0),
     "Ondansetron 8mg": ("Oncology", 90.0),
-    "Hydroxychloroquine 200mg": ("Rheumatology", 175.0),
+    "Hydroxychloroquine 200mg": ("Rheumatology", 180.0),
     "Indomethacin 75mg": ("Rheumatology", 120.0),
     "IFT Rehab Protocol": ("Physiotherapy", 400.0),
     "Ultrasound & Exercise": ("Physiotherapy", 350.0),
+    # 10 New Super-Specialty & Surgical Formulas
+    "Ferrous Ascorbate": ("Hematology", 160.0),
+    "Diosmin 500mg": ("Vascular Surgery", 290.0),
+    "Silicone Scar Gel": ("Plastic Surgery", 550.0),
+    "Donepezil 5mg": ("Geriatrics", 240.0),
+    "Gabapentin 300mg": ("Neurosurgery", 210.0),
+    "Atorvastatin 40mg": ("Cardiothoracic Surgery", 195.0),
+    "Clopidogrel 75mg": ("Cardiothoracic Surgery", 175.0),
+    "Ursodeoxycholic Acid": ("Hepatology", 380.0),
+    "Duloxetine 30mg": ("Pain & Palliative Care", 225.0),
+    "Surgical Consumables & Dressing Kit": ("General Surgery / OT", 450.0),
 }
 
 def sync_clinical_medicines_to_db(rules_df: pd.DataFrame):
@@ -96,7 +107,6 @@ if require_login("Pharmacy Inventory", "pharma123"):
         med = str(row["Medicine Name"]).strip()
         stock = int(row["Stock"])
         min_lim = int(row["Min Limit"])
-        # Baseline clinical velocity + observed consultation dispensing rate
         observed = dispense_counts.get(med, 0)
         est_daily_burn = round(max(1.2, observed * 1.5), 1)
         days_left = round(stock / est_daily_burn, 1)
@@ -127,7 +137,6 @@ if require_login("Pharmacy Inventory", "pharma123"):
             st.error("⚠️ Immediate Reorder Required (Below Minimum Safety Threshold):")
             st.dataframe(low_stock[["Medicine Name", "Category", "Stock", "Min Limit", "Days to Stockout", "Suggested Reorder Qty"]], use_container_width=True, hide_index=True)
 
-        # Filter bar
         f_col1, f_col2 = st.columns([2, 1])
         search_med = f_col1.text_input("🔍 Search Medicine:", placeholder="Type medicine name...")
         categories = ["All Categories"] + sorted(df_inv["Category"].dropna().unique().tolist())
@@ -168,7 +177,6 @@ if require_login("Pharmacy Inventory", "pharma123"):
         st.subheader("🔮 Supply Runway & Automated Reorder Forecasting")
         st.caption("Calculates expected days remaining using clinical dispensing velocity and generates 14-day safety-buffer purchase orders.")
 
-        # Top 15 shortest-runway items bar chart
         top_risk_chart = df_inv.sort_values("Days to Stockout").head(15)
         fig_runway = px.bar(
             top_risk_chart,
@@ -182,7 +190,6 @@ if require_login("Pharmacy Inventory", "pharma123"):
         fig_runway.update_layout(yaxis={"categoryorder": "total descending"}, height=450)
         st.plotly_chart(fig_runway, use_container_width=True)
 
-        # Automated Purchase Order Table & CSV Download
         po_df = df_inv[df_inv["Suggested Reorder Qty"] > 0][
             ["Medicine Name", "Category", "Stock", "Est. Daily Burn", "Days to Stockout", "Suggested Reorder Qty", "Price (₹)"]
         ].copy()
@@ -195,7 +202,7 @@ if require_login("Pharmacy Inventory", "pharma123"):
             if st.download_button(
                 label=f"📥 Download Purchase Order CSV (Total: ₹{po_df['Estimated PO Cost (₹)'].sum():,.2f})",
                 data=po_csv,
-                file_name=f"Sunrise_Pharmacy_PO_{datetime.now().strftime('%Y%m%d')}.csv",
+                file_name=f"Govardhan_Pharmacy_PO_{datetime.now().strftime('%Y%m%d')}.csv",
                 mime="text/csv",
                 type="primary"
             ):
@@ -226,21 +233,7 @@ if require_login("Pharmacy Inventory", "pharma123"):
                         conn.commit()
                         log_audit_event("Pharmacist", "Dispensary_Desk", "ADD_NEW_MEDICINE", new_name.strip(), db_path=DB_PATH)
                         st.success(f"Added '{new_name.strip()}' to inventory!")
-NEW_SPECIALTY_MEDICINES = [
-    ("Potassium Citrate Syr.", "Urology", 85, 145.0, "2027-08-31"),
-    ("Hydroxychloroquine 200mg", "Rheumatology", 110, 180.0, "2027-10-15"),
-    ("Ferrous Ascorbate", "Hematology", 150, 160.0, "2027-11-30"),
-    ("Diosmin 500mg", "Vascular Surgery", 75, 290.0, "2027-07-31"),
-    ("Silicone Scar Gel", "Plastic Surgery", 40, 550.0, "2027-09-30"),
-    ("Donepezil 5mg", "Geriatrics", 65, 240.0, "2027-12-31"),
-    ("Gabapentin 300mg", "Neurosurgery", 95, 210.0, "2027-08-15"),
-    ("Atorvastatin 40mg", "Cardiothoracic Surgery", 140, 195.0, "2027-10-31"),
-    ("Ursodeoxycholic Acid", "Hepatology", 70, 380.0, "2027-06-30"),
-    ("Duloxetine 30mg", "Pain & Palliative Care", 80, 225.0, "2027-09-15"),
-    ("Nitrofurantoin 100mg", "Urology", 90, 135.0, "2027-07-15"),
-    ("Clopidogrel 75mg", "Cardiothoracic Surgery", 120, 175.0, "2027-11-15"),
-    ("Surgical Consumables & Dressing Kit", "General Surgery / OT", 60, 450.0, "2028-01-31"),
-]                        st.rerun()
+                        st.rerun()
                     conn.close()
                 else:
                     st.error("Please enter a valid medicine name.")
