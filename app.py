@@ -78,7 +78,8 @@ if "razorpay_payment_id" in query_params and "razorpay_signature" in query_param
     }
     try:
         client.utility.verify_payment_link_signature(verify_payload)
-        if appt_id and verify_payload["payment_link_status"] == "paid":
+        link_status = verify_payload["payment_link_status"]
+        if appt_id and link_status == "paid":
             with sqlite3.connect(DB_PATH) as conn:
                 conn.execute("UPDATE appointments SET status = 'Confirmed (Paid)' WHERE id = ?", (appt_id,))
                 row = conn.execute("SELECT care_mode FROM appointments WHERE id = ?", (appt_id,)).fetchone()
@@ -88,17 +89,23 @@ if "razorpay_payment_id" in query_params and "razorpay_signature" in query_param
                 st.session_state["confirmed_tele_appt_id"] = int(appt_id)
             else:
                 st.session_state["payment_flash_msg"] = ("success", f"🔒 Verified payment ({verify_payload['razorpay_payment_id']})! Booking #{appt_id} is Confirmed.")
+        else:
+            status_label = link_status or "incomplete"
+            log_audit_event("Payment_Gateway", verify_payload["razorpay_payment_id"], f"RAZORPAY_STATUS_{status_label.upper()}", f"Appt #{appt_id or 'Unknown'}", db_path=DB_PATH)
+            st.session_state["payment_flash_msg"] = ("warning", f"⚠️ Payment callback received with status `{status_label}` (Booking ID: `{appt_id or 'Missing'}`). Your booking remains awaiting payment.")
     except razorpay.errors.SignatureVerificationError:
         log_audit_event("Security_Alert", "Callback_Spoof_Attempt", "INVALID_RAZORPAY_SIGNATURE", f"Appt #{appt_id}", db_path=DB_PATH)
         st.session_state["payment_flash_msg"] = ("error", "🚨 Security Alert: Invalid Razorpay signature detected.")
     finally:
         st.query_params.clear()
 
-# Render persisted payment confirmation message after query_params rerun
+# Render persisted payment confirmation/warning message after query_params rerun
 if "payment_flash_msg" in st.session_state:
     level, msg_text = st.session_state.pop("payment_flash_msg")
     if level == "success":
         st.success(msg_text)
+    elif level == "warning":
+        st.warning(msg_text)
     else:
         st.error(msg_text)
 
