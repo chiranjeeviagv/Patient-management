@@ -514,3 +514,14 @@ def render(db_path: str, doctors_df, rules_df, ai_engine, client):
                 else:
                     conn.close()
                     st.error("❌ Verification failed. Check your name and phone number.")
+                    if free_text_symptoms:
+                red_flags = ["chest pain", "stroke", "unconscious", "severe bleeding", "can't breathe", "cannot breathe", "seizure", "heart attack"]
+                if any(flag in free_text_symptoms.lower() for flag in red_flags):
+                    st.error("🚨 **EMERGENCY RED-FLAG DETECTED:** Call 24×7 Emergency Ambulance (`+91 891-255-8888`) or visit the Simhachalam Hills Trauma Bay immediately. Do not wait for an online slot.")
+                recommendations = ai_engine.recommend_specialty(free_text_symptoms)
+                top_spec, confidence, urgency = recommendations[0]
+                ac1, ac2, ac3 = st.columns(3)
+                ac1.metric("AI Recommended Dept", top_spec)
+                ac2.metric("TF-IDF Match Score", f"{confidence}%")
+                ac3.metric("Triage Priority", urgency)
+                st.caption("⚕️ *Clinical Decision Support Only: AI routing assists department selection and does not constitute a medical diagnosis.*")
