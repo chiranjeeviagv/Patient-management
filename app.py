@@ -24,22 +24,21 @@ def initialize_system(db_path: str):
     init_db()
     init_audit_table(db_path)
     seed_portfolio_demo_data(db_path)
-    conn = sqlite3.connect(db_path)
-    cols = {r[1] for r in conn.execute("PRAGMA table_info(appointments)").fetchall()}
-    for col, ddl in [
-        ("aadhaar_masked", "TEXT DEFAULT 'Unverified'"),
-        ("aadhaar_hash", "TEXT DEFAULT ''"),
-        ("kyc_verified", "INTEGER DEFAULT 0"),
-        ("care_mode", "TEXT DEFAULT 'Offline OPD Consultation'"),
-        ("service_package", "TEXT DEFAULT 'Standard OPD'"),
-        ("patient_email", "TEXT DEFAULT ''"),
-        ("preferred_tele_time", "TEXT DEFAULT ''"),
-        ("tele_room_link", "TEXT DEFAULT ''"),
-    ]:
-        if col not in cols:
-            conn.execute(f"ALTER TABLE appointments ADD COLUMN {col} {ddl}")
-    conn.commit()
-    conn.close()
+    with sqlite3.connect(db_path) as conn:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(appointments)").fetchall()}
+        for col, ddl in [
+            ("aadhaar_masked", "TEXT DEFAULT 'Unverified'"),
+            ("aadhaar_hash", "TEXT DEFAULT ''"),
+            ("kyc_verified", "INTEGER DEFAULT 0"),
+            ("care_mode", "TEXT DEFAULT 'Offline OPD Consultation'"),
+            ("service_package", "TEXT DEFAULT 'Standard OPD'"),
+            ("patient_email", "TEXT DEFAULT ''"),
+            ("preferred_tele_time", "TEXT DEFAULT ''"),
+            ("tele_room_link", "TEXT DEFAULT ''"),
+        ]:
+            if col not in cols:
+                conn.execute(f"ALTER TABLE appointments ADD COLUMN {col} {ddl}")
+        conn.commit()
     return True
 
 @st.cache_data(ttl=3600)
@@ -80,21 +79,28 @@ if "razorpay_payment_id" in query_params and "razorpay_signature" in query_param
     try:
         client.utility.verify_payment_link_signature(verify_payload)
         if appt_id and verify_payload["payment_link_status"] == "paid":
-            conn = sqlite3.connect(DB_PATH)
-            conn.execute("UPDATE appointments SET status = 'Confirmed (Paid)' WHERE id = ?", (appt_id,))
-            row = conn.execute("SELECT care_mode FROM appointments WHERE id = ?", (appt_id,)).fetchone()
-            conn.commit()
-            conn.close()
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("UPDATE appointments SET status = 'Confirmed (Paid)' WHERE id = ?", (appt_id,))
+                row = conn.execute("SELECT care_mode FROM appointments WHERE id = ?", (appt_id,)).fetchone()
+                conn.commit()
             log_audit_event("Payment_Gateway", verify_payload["razorpay_payment_id"], "RAZORPAY_SIGNATURE_VERIFIED", f"Appt #{appt_id}", db_path=DB_PATH)
             if row and "Online" in row[0]:
                 st.session_state["confirmed_tele_appt_id"] = int(appt_id)
             else:
-                st.success(f"🔒 Verified payment ({verify_payload['razorpay_payment_id']})! Booking #{appt_id} is Confirmed.")
+                st.session_state["payment_flash_msg"] = ("success", f"🔒 Verified payment ({verify_payload['razorpay_payment_id']})! Booking #{appt_id} is Confirmed.")
     except razorpay.errors.SignatureVerificationError:
         log_audit_event("Security_Alert", "Callback_Spoof_Attempt", "INVALID_RAZORPAY_SIGNATURE", f"Appt #{appt_id}", db_path=DB_PATH)
-        st.error("🚨 Security Alert: Invalid Razorpay signature detected.")
+        st.session_state["payment_flash_msg"] = ("error", "🚨 Security Alert: Invalid Razorpay signature detected.")
     finally:
         st.query_params.clear()
+
+# Render persisted payment confirmation message after query_params rerun
+if "payment_flash_msg" in st.session_state:
+    level, msg_text = st.session_state.pop("payment_flash_msg")
+    if level == "success":
+        st.success(msg_text)
+    else:
+        st.error(msg_text)
 
 render_hero(f"🏥 {HOSPITAL_TITLE}", HOSPITAL_SUBTITLE)
 
