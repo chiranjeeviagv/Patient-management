@@ -14,7 +14,7 @@ def render(hospital_title: str, doctors_df):
             st.write(
                 "Founded to bridge specialized medical expertise with seamless digital patient access and modern clinical governance, "
                 f"**{hospital_title}** delivers comprehensive **Offline OPD Consultations**, **24×7 Tele-Medicine**, "
-                "and **In-Hospital Surgical & Critical Care** across **20 specialized clinical departments**."
+                "and **In-Hospital Surgical & Critical Care** across "across **30 specialized clinical departments** "
             )
             st.markdown("#### 🏥 Clinical & Surgical Infrastructure")
             st.markdown(
@@ -26,7 +26,7 @@ def render(hospital_title: str, doctors_df):
         with st.container(border=True):
             st.markdown("### 📊 Hospital at a Glance")
             m1, m2 = st.columns(2)
-            m1.metric("Clinical Specialties", "20 Departments")
+            m1.metric("Clinical Specialties", "30 Departments")
             m2.metric("Modular OTs & Beds", "4 OTs • 120 Beds")
             m3, m4 = st.columns(2)
             m3.metric("Nursing & OT Staff", "85+ Care Staff")
