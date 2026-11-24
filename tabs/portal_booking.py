@@ -102,6 +102,26 @@ def _render_av_permission_widget(room_link: str):
     """
     components.html(html_code, height=235)
 
+def _ensure_appointments_schema(conn: sqlite3.Connection) -> set:
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(appointments)").fetchall()}
+    for col, ddl in [
+        ("aadhaar_masked", "TEXT DEFAULT 'Unverified'"),
+        ("aadhaar_hash", "TEXT DEFAULT ''"),
+        ("kyc_verified", "INTEGER DEFAULT 0"),
+        ("care_mode", "TEXT DEFAULT 'Offline OPD Consultation'"),
+        ("service_package", "TEXT DEFAULT 'Standard OPD'"),
+        ("patient_email", "TEXT DEFAULT ''"),
+        ("preferred_tele_time", "TEXT DEFAULT ''"),
+        ("tele_room_link", "TEXT DEFAULT ''"),
+    ]:
+        if col not in cols:
+            try:
+                conn.execute(f"ALTER TABLE appointments ADD COLUMN {col} {ddl}")
+            except Exception:
+                pass
+    conn.commit()
+    return {r[1] for r in conn.execute("PRAGMA table_info(appointments)").fetchall()}
+
 def render(db_path: str, doctors_df, rules_df, ai_engine, client):
     specialty_cards = doctors_df.to_dict("records")
     specialty_doctors = doctors_df["doctor"].tolist()
@@ -113,6 +133,7 @@ def render(db_path: str, doctors_df, rules_df, ai_engine, client):
     active_tele_id = st.session_state.get("confirmed_tele_appt_id")
     if active_tele_id:
         conn = sqlite3.connect(db_path)
+        _ensure_appointments_schema(conn)
         rec = conn.execute(
             "SELECT id, patient_name, patient_contact, patient_email, doctor, appt_date, appt_time, preferred_tele_time, tele_room_link "
             "FROM appointments WHERE id = ?",
@@ -399,6 +420,7 @@ def render(db_path: str, doctors_df, rules_df, ai_engine, client):
                     clean_mode = care_mode.split(" ", 1)[1]
                     triage = f"[{clean_mode} | {service_package} | Severity: {severity} | Duration: {duration} | Age: {p_age}] Symptoms: {', '.join(selected_symptoms)}. Notes: {additional_details or 'None'}"
                     conn = sqlite3.connect(db_path)
+                    _ensure_appointments_schema(conn)
                     cur = conn.cursor()
                     cur.execute(
                         "INSERT INTO appointments (patient_name, patient_age, patient_gender, patient_contact, patient_email, patient_problem, doctor, appt_date, appt_time, status, aadhaar_masked, aadhaar_hash, kyc_verified, care_mode, service_package) "
@@ -450,31 +472,11 @@ def render(db_path: str, doctors_df, rules_df, ai_engine, client):
 
     with col_right:
         tab_req, tab_rx = st.tabs(["📋 Active Care & Surgery Requests", "📄 Download Prescriptions & Discharge Notes"])
-     with tab_req:
+        with tab_req:
             conn = sqlite3.connect(db_path)
-            cols = {r[1] for r in conn.execute("PRAGMA table_info(appointments)").fetchall()}
-            for col, ddl in [
-                ("aadhaar_masked", "TEXT DEFAULT 'Unverified'"),
-                ("aadhaar_hash", "TEXT DEFAULT ''"),
-                ("kyc_verified", "INTEGER DEFAULT 0"),
-                ("care_mode", "TEXT DEFAULT 'Offline OPD Consultation'"),
-                ("service_package", "TEXT DEFAULT 'Standard OPD'"),
-                ("patient_email", "TEXT DEFAULT ''"),
-                ("preferred_tele_time", "TEXT DEFAULT ''"),
-                ("tele_room_link", "TEXT DEFAULT ''"),
-            ]:
-                if col not in cols:
-                    try:
-                        conn.execute(f"ALTER TABLE appointments ADD COLUMN {col} {ddl}")
-                    except Exception:
-                        pass
-            conn.commit()
-
-            # Re-read actual columns so the SELECT never fails on missing columns
-            actual_cols = {r[1] for r in conn.execute("PRAGMA table_info(appointments)").fetchall()}
+            actual_cols = _ensure_appointments_schema(conn)
             mode_expr = "COALESCE(care_mode, 'Offline OPD') AS [Care Mode]" if "care_mode" in actual_cols else "'Offline OPD' AS [Care Mode]"
             time_expr = "COALESCE(NULLIF(preferred_tele_time, ''), appt_time) AS [Confirmed Time]" if "preferred_tele_time" in actual_cols else "appt_time AS [Confirmed Time]"
-
             df = pd.read_sql_query(
                 f"SELECT id AS ID, patient_name AS [Patient], {mode_expr}, "
                 f"doctor AS Doctor, appt_date AS [Date], {time_expr}, status AS Status "
@@ -483,6 +485,7 @@ def render(db_path: str, doctors_df, rules_df, ai_engine, client):
             )
             conn.close()
             st.dataframe(df, use_container_width=True, hide_index=True)
+
         with tab_rx:
             st.caption("Enter your full name and registered phone number to download your prescription or surgical discharge PDF.")
             v_name = st.text_input("Patient Full Name:", key="v_name")
