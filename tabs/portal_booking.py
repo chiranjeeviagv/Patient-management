@@ -451,15 +451,29 @@ def render(db_path: str, doctors_df, rules_df, ai_engine, client):
     with col_right:
         tab_req, tab_rx = st.tabs(["📋 Active Care & Surgery Requests", "📄 Download Prescriptions & Discharge Notes"])
         with tab_req:
-            conn = sqlite3.connect(db_path)
-            df = pd.read_sql_query(
-                "SELECT id AS ID, patient_name AS [Patient], COALESCE(care_mode, 'Offline OPD') AS [Care Mode], "
-                "doctor AS Doctor, appt_date AS [Date], COALESCE(preferred_tele_time, appt_time) AS [Confirmed Time], status AS Status "
-                "FROM appointments ORDER BY id DESC",
-                conn
-            )
-            conn.close()
-            st.dataframe(df, use_container_width=True, hide_index=True)
+         conn = sqlite3.connect(db_path)
+         cols = {r[1] for r in conn.execute("PRAGMA table_info(appointments)").fetchall()}
+         for col, ddl in [
+             ("aadhaar_masked", "TEXT DEFAULT 'Unverified'"),
+             ("aadhaar_hash", "TEXT DEFAULT ''"),
+             ("kyc_verified", "INTEGER DEFAULT 0"),
+             ("care_mode", "TEXT DEFAULT 'Offline OPD Consultation'"),
+             ("service_package", "TEXT DEFAULT 'Standard OPD'"),
+             ("patient_email", "TEXT DEFAULT ''"),
+             ("preferred_tele_time", "TEXT DEFAULT ''"),
+             ("tele_room_link", "TEXT DEFAULT ''"),
+         ]:
+             if col not in cols:
+                 conn.execute(f"ALTER TABLE appointments ADD COLUMN {col} {ddl}")
+         conn.commit()
+         df = pd.read_sql_query(
+             "SELECT id AS ID, patient_name AS [Patient], COALESCE(care_mode, 'Offline OPD') AS [Care Mode], "
+             "doctor AS Doctor, appt_date AS [Date], COALESCE(NULLIF(preferred_tele_time, ''), appt_time) AS [Confirmed Time], status AS Status "
+             "FROM appointments ORDER BY id DESC",
+             conn
+         )
+         conn.close()
+         st.dataframe(df, use_container_width=True, hide_index=True)
 
         with tab_rx:
             st.caption("Enter your full name and registered phone number to download your prescription or surgical discharge PDF.")
